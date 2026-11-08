@@ -15,7 +15,10 @@ export const config = {
   jwtRefreshTtlSec: 30 * 24 * 3600,
   corsOrigin: (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(','),
   s3: {
-    endpoint: process.env.S3_ENDPOINT ?? 'http://127.0.0.1:9000',
+    endpoint: process.env.S3_ENDPOINT ?? 'http://127.0.0.1:9090',
+    // Host embedded in presigned URLs — MUST be reachable by the browser.
+    // In compose: internal endpoint is http://s3mock:9090, public is http://localhost:9090.
+    publicEndpoint: process.env.S3_PUBLIC_ENDPOINT ?? process.env.S3_ENDPOINT ?? 'http://127.0.0.1:9090',
     region: process.env.S3_REGION ?? 'us-east-1',
     bucket: process.env.S3_BUCKET ?? 'submissions',
     accessKey: process.env.S3_ACCESS_KEY ?? 'minioadmin',

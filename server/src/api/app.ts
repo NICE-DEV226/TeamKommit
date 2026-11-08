@@ -21,9 +21,12 @@ export function createApp() {
   app.use(compression());
   app.use(express.json({ limit: '256kb' })); // JSON only — files never transit the API
 
+  // Global safety-net limiter. Kept high because the board must sustain
+  // hundreds of concurrent readers; real abuse protection lives on the
+  // sensitive endpoints (auth: 20/min, invite codes: ~7/min).
   const globalLimiter = rateLimit({
     windowMs: 60_000,
-    limit: 600,
+    limit: 60_000,
     standardHeaders: true,
     legacyHeaders: false,
   });

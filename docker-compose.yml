@@ -7,54 +7,41 @@ services:
     volumes:
       - mongo-data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "try { rs.status().ok } catch(e) { rs.initiate().ok }"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "try { rs.status().ok } catch(e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok }"]
       interval: 5s
       timeout: 10s
       retries: 20
 
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
+  # S3-compatible object storage (s3mock: zero-config, supports multipart +
+  # presigned URLs). Swap for MinIO/R2 in production via env vars.
+  s3mock:
+    image: adobe/s3mock:latest
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      initialBuckets: submissions
     ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio-data:/data
+      - "9090:9090"
+      - "9191:9191"
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/ >/dev/null 2>&1 || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 10
-
-  minio-init:
-    image: minio/mc:latest
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 minioadmin minioadmin &&
-      mc mb -p local/submissions || true &&
-      mc anonymous set none local/submissions
-      "
 
   server:
     build: ./server
     depends_on:
       mongo:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
+      s3mock:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 4000
       MONGODB_URI: mongodb://mongo:27017/teamkommit?replicaSet=rs0
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
-      S3_ENDPOINT: http://minio:9000
+      S3_ENDPOINT: http://s3mock:9090
+      S3_PUBLIC_ENDPOINT: http://localhost:9090
       S3_REGION: us-east-1
       S3_BUCKET: submissions
       S3_ACCESS_KEY: minioadmin
@@ -76,12 +63,12 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
+      s3mock:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       MONGODB_URI: mongodb://mongo:27017/teamkommit?replicaSet=rs0
-      S3_ENDPOINT: http://minio:9000
+      S3_ENDPOINT: http://s3mock:9090
       S3_REGION: us-east-1
       S3_BUCKET: submissions
       S3_ACCESS_KEY: minioadmin
@@ -90,4 +77,4 @@ services:
 
 volumes:
   mongo-data:
-  minio-data:
+

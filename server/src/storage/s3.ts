@@ -6,12 +6,17 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { config } from '../config.js';
 
-export const s3 = new S3Client({
-  endpoint: config.s3.endpoint,
+const s3Config = {
   region: config.s3.region,
   forcePathStyle: config.s3.forcePathStyle,
   credentials: { accessKeyId: config.s3.accessKey, secretAccessKey: config.s3.secretKey },
-});
+};
+
+// Internal client: server-side control-plane ops (create/complete/abort/list/head/download).
+export const s3 = new S3Client({ endpoint: config.s3.endpoint, ...s3Config });
+// Public client: ONLY used to sign presigned URLs — its endpoint host is what
+// ends up in the URL the browser calls, so it must be publicly reachable.
+const s3Public = new S3Client({ endpoint: config.s3.publicEndpoint, ...s3Config });
 
 const { bucket } = config.s3;
 
@@ -21,7 +26,7 @@ export async function createMultipartUpload(key: string, contentType = 'applicat
 }
 
 export async function presignPart(key: string, uploadId: string, partNumber: number, expiresIn = config.submissions.uploadUrlTtlSec) {
-  return getSignedUrl(s3, new UploadPartCommand({
+  return getSignedUrl(s3Public, new UploadPartCommand({
     Bucket: bucket, Key: key, UploadId: uploadId, PartNumber: partNumber,
   }), { expiresIn });
 }

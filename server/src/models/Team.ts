@@ -27,7 +27,8 @@ const teamSchema = new Schema(
 );
 
 teamSchema.index({ hackathonId: 1, slug: 1 }, { unique: true });
-teamSchema.index({ hackathonId: 1, lifecycleStatus: 1, recruitmentStatus: 1, memberCount: 1 });
+// Board query path: equality fields → memberCount sort → _id tiebreak (stable pagination)
+teamSchema.index({ hackathonId: 1, lifecycleStatus: 1, recruitmentStatus: 1, memberCount: 1, _id: 1 });
 
 export type TeamDoc = HydratedDocument<InferSchemaType<typeof teamSchema>>;
 export const Team = model('Team', teamSchema);

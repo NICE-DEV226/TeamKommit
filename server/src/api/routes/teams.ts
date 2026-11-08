@@ -62,9 +62,11 @@ teamsRouter.get('/board', validate(boardQuery, 'query'), asyncH(async (req, res)
   }
   if (q.skill) filter.skillsSought = q.skill;
 
+  const BOARD_FIELDS = 'name slug description leaderId minSize maxSize memberCount lifecycleStatus recruitmentStatus skillsSought skillsHeld formationMessage createdAt updatedAt';
   const [teams, total] = await Promise.all([
     Team.find(filter)
-      .sort({ memberCount: 1, updatedAt: -1 }) // emptiest first = most relevant
+      .select(BOARD_FIELDS)
+      .sort({ memberCount: 1, _id: 1 }) // emptiest first = most relevant; _id = stable pagination
       .skip((q.page - 1) * q.pageSize)
       .limit(q.pageSize)
       .lean(),
