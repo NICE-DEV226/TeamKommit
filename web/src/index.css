@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-zinc-950 text-zinc-100 antialiased;
+}
+
+:focus-visible {
+  @apply outline-2 outline-offset-2 outline-emerald-400;
+}
+
+.skip-link {
+  @apply sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-emerald-500 focus:text-black focus:px-4 focus:py-2;
+}

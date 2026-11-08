@@ -1,0 +1,51 @@
+import 'dotenv/config';
+
+function required(name: string, fallback?: string): string {
+  const v = process.env[name] ?? fallback;
+  if (v === undefined) throw new Error(`Missing env var: ${name}`);
+  return v;
+}
+
+export const config = {
+  port: Number(process.env.PORT ?? 4000),
+  nodeEnv: process.env.NODE_ENV ?? 'development',
+  mongoUri: required('MONGODB_URI', 'mongodb://127.0.0.1:27017/teamkommit?replicaSet=rs0'),
+  jwtSecret: required('JWT_SECRET', 'dev-only-secret'),
+  jwtAccessTtlSec: 15 * 60,
+  jwtRefreshTtlSec: 30 * 24 * 3600,
+  corsOrigin: (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(','),
+  s3: {
+    endpoint: process.env.S3_ENDPOINT ?? 'http://127.0.0.1:9000',
+    region: process.env.S3_REGION ?? 'us-east-1',
+    bucket: process.env.S3_BUCKET ?? 'submissions',
+    accessKey: process.env.S3_ACCESS_KEY ?? 'minioadmin',
+    secretKey: process.env.S3_SECRET_KEY ?? 'minioadmin',
+    forcePathStyle: process.env.S3_FORCE_PATH_STYLE !== 'false',
+  },
+  invite: {
+    // 128 bits of entropy, base64url → ~22 chars. Brute force is infeasible;
+    // rate limiting + expiry are the real defenses.
+    codeBytes: 16,
+    ttlHours: 72,
+    maxAttemptsPerHour: 20,
+  },
+  submissions: {
+    maxFileBytes: 100 * 1024 * 1024,
+    chunkBytes: 8 * 1024 * 1024,
+    uploadUrlTtlSec: 15 * 60,
+    // Grace policy: uploads STARTED before the deadline may complete up to
+    // GRACE_UPLOAD_MIN after it; metadata confirmation has a shorter grace.
+    graceUploadMin: 15,
+    graceConfirmMin: 30,
+    linkCheckTimeoutMs: 8000,
+    maxLinks: 10,
+    zipBombRatio: 100,
+    maxZipEntries: 10_000,
+  },
+  jobs: {
+    workerId: `worker-${process.pid}-${Date.now()}`,
+    pollIntervalMs: 500,
+    leaseMs: 60_000,
+    maxAttempts: 5,
+  },
+} as const;
