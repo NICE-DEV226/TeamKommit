@@ -103,9 +103,14 @@ membershipRouter.post('/invitations/:id/decline', requireAuth, validate(z.object
   const inv = await Invitation.findById(req.params.id);
   if (!inv || inv.status !== 'PENDING') throw nf('Invitation not found');
   if (inv.inviteeId && inv.inviteeId.toString() !== req.userId!.toString()) throw forbidden();
-  inv.status = 'DECLINED';
-  inv.decidedAt = new Date();
-  await inv.save();
+  // Atomic PENDING→DECLINED: a concurrent accept commits ACCEPTED inside the
+  // admission tx — an unconditional save() here could clobber it back to
+  // DECLINED while the membership stays ACTIVE.
+  const declined = await Invitation.findOneAndUpdate(
+    { _id: inv._id, status: 'PENDING' },
+    { $set: { status: 'DECLINED', decidedAt: new Date() } },
+  );
+  if (!declined) throw nf('Invitation not found');
   res.json({ ok: true });
 }));
 
@@ -199,10 +204,13 @@ async function decideRequest(req: Request, res: Response, decision: 'ACCEPTED' |
   if (!(await isActiveTeamLeader(team._id as Types.ObjectId, req.userId!))) throw forbidden('Only the leader can decide requests');
 
   if (decision === 'DECLINED') {
-    jr.status = 'DECLINED';
-    jr.decidedBy = req.userId ?? null;
-    jr.decidedAt = new Date();
-    await jr.save();
+    // Atomic PENDING→DECLINED — see invitation decline above: a racing
+    // accept must not be overwritten after its membership committed.
+    const declined = await JoinRequest.findOneAndUpdate(
+      { _id: jr._id, status: 'PENDING' },
+      { $set: { status: 'DECLINED', decidedBy: req.userId ?? null, decidedAt: new Date() } },
+    );
+    if (!declined) throw nf('Request not found or already decided');
     return res.json({ ok: true });
   }
 

@@ -118,3 +118,59 @@ describe('invite-code bypass via /invitations/:id/accept', () => {
     expect((await Membership.findOne({ teamId: team._id, participantId: joiner._id, status: 'ACTIVE' }).lean())).toBeTruthy();
   });
 });
+
+describe('decide-request race — decline must not clobber a committed accept', () => {
+  /** End state must be consistent: ACCEPTED ⇔ membership exists; DECLINED ⇔ none. */
+  async function assertConsistent(jrId: Types.ObjectId, teamId: Types.ObjectId, participantId: Types.ObjectId) {
+    const jr = await JoinRequest.findById(jrId).lean();
+    const m = await Membership.findOne({ teamId, participantId, status: 'ACTIVE' }).lean();
+    if (jr!.status === 'ACCEPTED') {
+      expect(m, 'ACCEPTED request without membership').toBeTruthy();
+    } else {
+      expect(jr!.status).toBe('DECLINED');
+      expect(m, 'DECLINED request but membership exists').toBeNull();
+    }
+  }
+
+  it('concurrent accept+decline on a join request never diverges', async () => {
+    for (let i = 0; i < 8; i++) {
+      const { leader, team } = await teamWithMember();
+      const requester = await makeUser();
+      const jr = await JoinRequest.create({
+        hackathonId: team.hackathonId, teamId: team._id, participantId: requester._id,
+        status: 'PENDING', message: '',
+      });
+      const h = auth(leader._id as Types.ObjectId);
+      await Promise.all([
+        request(app).post(`/api/requests/${jr._id}/accept`).set(h),
+        request(app).post(`/api/requests/${jr._id}/decline`).set(h),
+      ]);
+      await assertConsistent(jr._id as Types.ObjectId, team._id as Types.ObjectId, requester._id as Types.ObjectId);
+    }
+  });
+
+  it('concurrent accept+decline on a DIRECT invitation never diverges', async () => {
+    for (let i = 0; i < 8; i++) {
+      const { hackathon, team } = await teamWithMember();
+      const invitee = await makeUser();
+      const inv = await Invitation.create({
+        hackathonId: hackathon._id, teamId: team._id,
+        inviterId: team.leaderId, inviteeId: invitee._id, kind: 'DIRECT',
+        status: 'PENDING', expiresAt: new Date(Date.now() + 3600_000),
+      });
+      const h = auth(invitee._id as Types.ObjectId);
+      await Promise.all([
+        request(app).post(`/api/invitations/${inv._id}/accept`).set(h),
+        request(app).post(`/api/invitations/${inv._id}/decline`).set(h),
+      ]);
+      const after = await Invitation.findById(inv._id).lean();
+      const m = await Membership.findOne({ teamId: team._id, participantId: invitee._id, status: 'ACTIVE' }).lean();
+      if (after!.status === 'ACCEPTED') {
+        expect(m, 'ACCEPTED invitation without membership').toBeTruthy();
+      } else {
+        expect(after!.status).toBe('DECLINED');
+        expect(m, 'DECLINED invitation but membership exists').toBeNull();
+      }
+    }
+  });
+});
