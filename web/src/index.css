@@ -1,17 +1,348 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: dark;
+@theme {
+  --font-sans: "Sora", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+
+  --color-paper: #fff8ec;
+  --color-cream: #fffdf6;
+  --color-ink: #191927;
+
+  --color-grape-500: #8b5cf6;
+  --color-grape-600: #7c3aed;
+  --color-grape-700: #6d28d9;
+  --color-sunny-400: #ffd43b;
+  --color-sunny-500: #f5b800;
+  --color-mint-400: #3ddc97;
+  --color-mint-500: #22c07a;
+  --color-sky-400: #5b9dff;
+  --color-sky-500: #3b82f6;
+  --color-bubble-200: #ffd9e4;
+  --color-bubble-400: #ff8fb1;
+  --color-bubble-500: #f76d95;
+  --color-tang-400: #ff9f45;
+  --color-tang-500: #f97316;
+
+  --ease-expo: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-snap: cubic-bezier(0.85, 0, 0.15, 1);
 }
 
 body {
-  @apply bg-zinc-950 text-zinc-100 antialiased;
+  @apply bg-paper text-ink antialiased;
+  overflow-x: clip;
+}
+
+/* Break out of the centered max-w-6xl column: band spans the full viewport
+   while its inner content stays centered via its own max-w-6xl wrapper. */
+.full-bleed {
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+}
+
+::selection {
+  background: var(--color-sunny-400);
+  color: var(--color-ink);
 }
 
 :focus-visible {
-  @apply outline-2 outline-offset-2 outline-emerald-400;
+  @apply outline-[3px] outline-offset-2 outline-ink;
 }
 
 .skip-link {
-  @apply sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-emerald-500 focus:text-black focus:px-4 focus:py-2;
+  @apply sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-sunny-400 focus:text-ink focus:px-4 focus:py-2 focus:rounded-full focus:border-2 focus:border-ink;
+}
+
+/* ---------- sticker primitives ---------- */
+
+@layer components {
+  .sticker {
+    @apply bg-cream border-2 border-ink rounded-3xl;
+    box-shadow: 6px 6px 0 var(--color-ink);
+  }
+  .sticker-sm {
+    @apply bg-cream border-2 border-ink rounded-2xl;
+    box-shadow: 4px 4px 0 var(--color-ink);
+  }
+  .sticker-flat {
+    @apply bg-cream border-2 border-ink rounded-2xl;
+    box-shadow: 4px 4px 0 var(--color-ink);
+  }
+  .sticker-ink {
+    @apply bg-ink text-cream border-2 border-ink rounded-3xl;
+    box-shadow: 6px 6px 0 rgb(25 25 39 / 0.25);
+  }
+
+  /* buttons: shared physical style via selector list (plain CSS — @apply of
+     custom classes is not allowed in Tailwind v4) */
+  :is(.btn, .btn-primary, .btn-grape, .btn-sunny, .btn-mint, .btn-sky, .btn-bubble, .btn-secondary, .btn-danger) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    border: 2px solid var(--color-ink);
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.25;
+    cursor: pointer;
+    user-select: none;
+    text-decoration: none;
+    box-shadow: 4px 4px 0 var(--color-ink);
+    transition: transform 150ms ease-out, box-shadow 150ms ease-out, background-color 150ms ease-out;
+  }
+  :is(.btn, .btn-primary, .btn-grape, .btn-sunny, .btn-mint, .btn-sky, .btn-bubble, .btn-secondary, .btn-danger):hover {
+    transform: translateY(-2px);
+    box-shadow: 3px 5px 0 var(--color-ink);
+  }
+  :is(.btn, .btn-primary, .btn-grape, .btn-sunny, .btn-mint, .btn-sky, .btn-bubble, .btn-secondary, .btn-danger):active {
+    transform: translate(3px, 3px);
+    box-shadow: 1px 1px 0 var(--color-ink);
+  }
+  :is(.btn, .btn-primary, .btn-grape, .btn-sunny, .btn-mint, .btn-sky, .btn-bubble, .btn-secondary, .btn-danger):disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: 4px 4px 0 var(--color-ink);
+  }
+  .btn-primary  { background: var(--color-ink); color: var(--color-cream); }
+  .btn-grape    { background: var(--color-grape-500); color: #fff; }
+  .btn-sunny    { background: var(--color-sunny-400); color: var(--color-ink); }
+  .btn-mint     { background: var(--color-mint-400); color: var(--color-ink); }
+  .btn-sky      { background: var(--color-sky-400); color: #fff; }
+  .btn-bubble   { background: var(--color-bubble-400); color: #fff; }
+  .btn-secondary { background: var(--color-cream); color: var(--color-ink); }
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--color-ink);
+    cursor: pointer;
+    transition: background-color 150ms ease-out;
+  }
+  .btn-ghost:hover { background: rgb(25 25 39 / 0.05); }
+  .btn-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-ghost:disabled:hover { background: transparent; }
+  .btn-danger   { background: var(--color-bubble-400); color: #fff; }
+  .btn-sm {
+    padding: 0.375rem 1rem;
+    font-size: 0.75rem;
+    box-shadow: 3px 3px 0 var(--color-ink);
+  }
+  .btn-sm:hover { box-shadow: 2px 4px 0 var(--color-ink); }
+  .btn-sm:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--color-ink); }
+
+  .input {
+    @apply w-full rounded-2xl border-2 border-ink bg-white px-4 py-2.5 text-sm text-ink
+      placeholder:text-ink/35
+      focus:outline-none focus:ring-4 focus:ring-sunny-400/60;
+    transition: box-shadow 150ms ease-out;
+  }
+  .input-mono {
+    @apply font-mono font-medium tracking-wide;
+  }
+  select.input {
+    @apply appearance-none pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23191927' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.9rem center;
+  }
+  textarea.input {
+    @apply min-h-[6rem] resize-y;
+  }
+
+  .label {
+    @apply block text-sm font-bold text-ink mb-1.5;
+  }
+
+  :is(.chip, .chip-neutral, .chip-grape, .chip-sunny, .chip-mint, .chip-sky, .chip-bubble) {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    border: 2px solid var(--color-ink);
+    padding: 0.2rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+  .chip-neutral { background: var(--color-cream); color: var(--color-ink); }
+  .chip-grape   { background: var(--color-grape-500); color: #fff; }
+  .chip-sunny   { background: var(--color-sunny-400); color: var(--color-ink); }
+  .chip-mint    { background: var(--color-mint-400); color: var(--color-ink); }
+  .chip-sky     { background: var(--color-sky-400); color: #fff; }
+  .chip-bubble  { background: var(--color-bubble-400); color: #fff; }
+
+  :is(.badge, .badge-ok, .badge-warn, .badge-bad, .badge-neutral, .badge-ink, .badge-grape, .badge-live) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    border: 2px solid var(--color-ink);
+    padding: 0.15rem 0.7rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.5;
+  }
+  .badge-ok      { background: var(--color-mint-400); color: var(--color-ink); }
+  .badge-warn    { background: var(--color-sunny-400); color: var(--color-ink); }
+  .badge-bad     { background: var(--color-bubble-400); color: #fff; }
+  .badge-neutral { background: var(--color-cream); color: var(--color-ink); }
+  .badge-ink     { background: var(--color-ink); color: var(--color-cream); }
+  .badge-grape   { background: var(--color-grape-500); color: #fff; }
+  .badge-live    { background: var(--color-mint-400); color: var(--color-ink); }
+  .badge-live::before {
+    content: "";
+    @apply h-2 w-2 rounded-full bg-ink;
+  }
+  .badge-offline {
+    @apply inline-flex items-center gap-1.5 rounded-full border-2 border-ink px-3 py-0.5 text-xs font-bold bg-sunny-400 text-ink;
+  }
+  .badge-offline::before {
+    content: "";
+    @apply h-2 w-2 rounded-full bg-ink;
+  }
+
+  .nav-pill {
+    @apply inline-flex items-center rounded-full border-2 border-ink bg-cream px-4 py-1.5
+      text-sm font-bold text-ink;
+    box-shadow: 3px 3px 0 var(--color-ink);
+    transition: transform 200ms var(--ease-spring), box-shadow 200ms var(--ease-expo);
+  }
+  .nav-pill:hover {
+    transform: translateY(-2px) rotate(-0.6deg);
+    box-shadow: 4px 6px 0 var(--color-ink);
+  }
+  .nav-pill:active {
+    transform: translate(2px, 2px) rotate(0deg);
+    box-shadow: 1px 1px 0 var(--color-ink);
+  }
+  .nav-link {
+    @apply relative rounded-full px-4 py-1.5 text-sm font-bold text-ink/60 transition-colors hover:text-ink hover:bg-ink/5;
+  }
+  .nav-link-active {
+    @apply bg-ink text-cream;
+  }
+
+  /* Horizontal-scroll nav on small screens — scrollbar hidden, swipe works */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+
+  .avatar {
+    @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-ink
+      bg-sunny-400 text-xs font-extrabold text-ink;
+  }
+
+  .highlight-bar {
+    @apply inline-block bg-sunny-400 px-2 -rotate-1;
+  }
+
+  .marquee {
+    @apply overflow-hidden whitespace-nowrap;
+  }
+  .marquee-inner {
+    @apply inline-block animate-[marquee_22s_linear_infinite];
+  }
+
+  .seat-bar { @apply flex gap-1.5; }
+  .seat {
+    @apply h-2 flex-1 rounded-full border border-ink/30 bg-ink/10;
+  }
+  .seat-filled { @apply bg-ink border-ink; }
+  .seat-open   { @apply bg-mint-400 border-ink; }
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@keyframes floaty {
+  0%, 100% { transform: translateY(0) rotate(var(--rot, 0deg)); }
+  50% { transform: translateY(-8px) rotate(var(--rot, 0deg)); }
+}
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+/* Ambient loops are reserved for tiny decorative doodles — slow enough to
+   read as "alive", not as bouncing. Never put these on content cards. */
+.floaty { animation: floaty 6s ease-in-out infinite; }
+.wiggle { animation: wiggle 4.5s ease-in-out infinite; }
+
+/* One-shot entrance: hero cards pop in with a soft overshoot, staggered.
+   transform+opacity only, ~700ms, expo ease — per motion research. */
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(26px) scale(0.94); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.pop-in {
+  animation: pop-in 700ms var(--ease-expo) both;
+}
+
+/* Lighter variant for grid items (board cards) */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.card-in {
+  animation: card-in 500ms var(--ease-expo) both;
+}
+
+/* Scroll reveal: fires once when ~15% visible. JS toggles .is-visible. */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 700ms var(--ease-expo), transform 700ms var(--ease-expo);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-enter { animation: pageIn 260ms var(--ease-expo) both; }
+
+.dotgrid {
+  background-image: radial-gradient(rgb(25 25 39 / 0.10) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .badge-live::before, .floaty, .wiggle, .marquee-inner, .page-enter,
+  .pop-in, .card-in { animation: none !important; }
+  .reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+  * { transition-duration: 0.01ms !important; }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-cream);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 25%, rgb(255 255 255 / 0.8) 50%, transparent 75%);
+  transform: translateX(-100%);
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+@keyframes shimmer {
+  to { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after { animation: none; }
 }

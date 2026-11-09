@@ -8,6 +8,7 @@ import { OutboxEvent } from '../models/OutboxEvent.js';
 import { DomainRejection } from '../lib/errors.js';
 import { finalizeIdempotencyKey, type IdempotencyClaim } from '../lib/idempotency.js';
 import { generateInviteCode, Invitation } from '../models/Invitation.js';
+import { canonicalSkills } from './taxonomy.js';
 import { config } from '../config.js';
 
 function slugify(name: string): string {
@@ -79,7 +80,7 @@ export async function createTeam(input: CreateTeamInput) {
           maxSize: input.maxSize,
           memberCount: 1,
           recruitmentStatus: input.recruitmentStatus ?? 'OPEN',
-          skillsSought: input.skillsSought ?? [],
+          skillsSought: canonicalSkills(input.skillsSought ?? []),
           formationMessage: input.formationMessage ?? '',
           version: 1,
         }],

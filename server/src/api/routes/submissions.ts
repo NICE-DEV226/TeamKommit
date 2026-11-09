@@ -273,6 +273,47 @@ submissionsRouter.get('/admin/stats', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Rich dashboard payload: deadlines, per-hackathon breakdown, recent
+// submissions with team names, and the latest late-attempt audit trail.
+submissionsRouter.get('/admin/overview', requireAuth, asyncH(async (req, res) => {
+  if (!req.isOrganizer) throw forbidden('Organizer role required');
+  const { AuditEvent } = await import('../../models/AuditEvent.js');
+
+  const [hackathons, recent, byHackathon, lateAttempts] = await Promise.all([
+    Hackathon.find({}).select('name slug status submissionOpensAt submissionDeadline formationClosesAt').sort({ createdAt: -1 }).lean(),
+    Submission.find({})
+      .sort({ updatedAt: -1 }).limit(12)
+      .populate('teamId', 'name')
+      .populate('hackathonId', 'name')
+      .lean(),
+    Submission.aggregate([
+      { $group: { _id: { hackathonId: '$hackathonId', status: '$status' }, count: { $sum: 1 } } },
+    ]),
+    AuditEvent.find({ eventType: 'SUBMISSION_LATE_ATTEMPT' })
+      .sort({ occurredAt: -1 }).limit(10)
+      .populate('actorId', 'displayName email')
+      .populate('teamId', 'name')
+      .lean(),
+  ]);
+
+  res.json({
+    hackathons,
+    recent: recent.map((s) => ({
+      _id: s._id, title: s.title, status: s.status, version: s.version,
+      fileName: s.fileName, updatedAt: s.updatedAt,
+      team: (s.teamId as { name?: string } | null)?.name ?? '—',
+      hackathon: (s.hackathonId as { name?: string } | null)?.name ?? '—',
+    })),
+    byHackathon,
+    lateAttempts: lateAttempts.map((e) => ({
+      occurredAt: e.occurredAt,
+      actor: (e.actorId as { displayName?: string } | null)?.displayName ?? '—',
+      team: (e.teamId as { name?: string } | null)?.name ?? '—',
+      metadata: e.metadata,
+    })),
+  });
+}));
+
 submissionsRouter.get('/admin/export.csv', requireAuth, async (req, res, next) => {
   try {
     if (!req.isOrganizer) throw forbidden('Organizer role required');

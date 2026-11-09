@@ -8,6 +8,7 @@ import { authRouter } from './routes/auth.js';
 import { teamsRouter } from './routes/teams.js';
 import { membershipRouter } from './routes/membership.js';
 import { submissionsRouter } from './routes/submissions.js';
+import { adminRouter } from './routes/admin.js';
 import { eventsRouter } from './routes/events.js';
 import { errorHandler, notFoundHandler } from './middleware/common.js';
 
@@ -38,6 +39,7 @@ export function createApp() {
   app.use('/api', teamsRouter);        // /hackathons, /board, /people, /teams/...
   app.use('/api', membershipRouter);   // /invitations, /requests, /teams/:id/join-request...
   app.use('/api/submissions', submissionsRouter);
+  app.use('/api/admin', adminRouter);
   app.use('/api/events', eventsRouter);
 
   app.use(notFoundHandler);

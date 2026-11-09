@@ -25,6 +25,10 @@ const hackathonSchema = new Schema(
       enum: ['OPT_IN_THEN_DISBAN', 'ORGANIZER_FALLBACK'],
       default: 'OPT_IN_THEN_DISBAN',
     },
+    // Owning organizer — set at creation, immutable. Scopes admin edits.
+    organizerId: { type: Schema.Types.ObjectId, ref: 'User' },
+    // Optional validation pipeline applied to submissions of this event.
+    pipelineId: { type: Schema.Types.ObjectId, ref: 'Pipeline' },
   },
   { timestamps: true },
 );

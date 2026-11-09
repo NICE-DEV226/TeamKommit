@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { Types } from 'mongoose';
 import rateLimit from 'express-rate-limit';
 import { Team } from '../../models/Team.js';
+import { Hackathon } from '../../models/Hackathon.js';
 import { Membership } from '../../models/Membership.js';
 import { User } from '../../models/User.js';
 import { Invitation, hashInviteCode } from '../../models/Invitation.js';
@@ -27,6 +28,17 @@ const codeLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: { code: 'RATE_LIMITED', message: 'Too many code attempts' } },
+});
+
+// Join requests: bounded per IP — a user spamming every team on the board
+// would otherwise create unbounded JoinRequest docs (partial unique index
+// only dedupes per team).
+const joinRequestLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: { code: 'RATE_LIMITED', message: 'Too many join requests' } },
 });
 
 function sendAdmitResult(res: Response, result: Awaited<ReturnType<typeof admit>>) {
@@ -124,7 +136,7 @@ membershipRouter.post('/teams/join-code', requireAuth, codeLimiter, validate(joi
 // ---------- Join requests (participant → team, leader decides) ----------
 
 const requestSchema = z.object({ message: z.string().max(500).optional() });
-membershipRouter.post('/teams/:id/join-request', requireAuth, validate(z.object({ id: oid }), 'params'), validate(requestSchema), asyncH(async (req, res) => {
+membershipRouter.post('/teams/:id/join-request', requireAuth, joinRequestLimiter, validate(z.object({ id: oid }), 'params'), validate(requestSchema), asyncH(async (req, res) => {
   const team = await Team.findById(req.params.id).lean();
   if (!team || team.lifecycleStatus !== 'ACTIVE') throw nf('Team not found');
   const now = new Date();
@@ -216,11 +228,18 @@ membershipRouter.get('/me/teams', requireAuth, asyncH(async (req, res) => {
   const memberships = await Membership.find({ participantId: req.userId, status: 'ACTIVE' }).lean();
   const teamIds = memberships.map((m) => m.teamId);
   const teams = await Team.find({ _id: { $in: teamIds } }).lean();
+  const hackathons = await Hackathon.find({ _id: { $in: teams.map((t) => t.hackathonId) } })
+    .select('name slug status submissionDeadline formationClosesAt').lean();
+  const hmap = new Map(hackathons.map((h) => [h._id.toString(), h]));
   res.json({
-    memberships: memberships.map((m) => ({
-      ...m,
-      team: teams.find((t) => t._id.toString() === m.teamId.toString()),
-    })),
+    memberships: memberships.map((m) => {
+      const team = teams.find((t) => t._id.toString() === m.teamId.toString());
+      return {
+        ...m,
+        team,
+        hackathon: team ? hmap.get(team.hackathonId.toString()) : undefined,
+      };
+    }),
   });
 }));
 

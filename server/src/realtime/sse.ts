@@ -11,11 +11,22 @@ interface Client {
   res: Response;
   hackathonId?: string;
   teamId?: string;
+  /** Authorization scope resolved once at connect time (see events.ts). */
+  memberTeamIds: Set<string>;
+  isOrganizer: boolean;
   lastId: number;
 }
 
+/** The authorization-relevant slice of a client — shared by live fan-out
+ * and Last-Event-ID replay so both apply identical rules. */
+export interface SubscriberScope {
+  hackathonId?: string;
+  teamId?: string;
+  memberTeamIds: Set<string>;
+  isOrganizer: boolean;
+}
+
 const clients = new Set<Client>();
-let lastEventSeq = 0;
 
 export function sseHeaders(res: Response): void {
   res.writeHead(200, {
@@ -27,8 +38,51 @@ export function sseHeaders(res: Response): void {
   res.flushHeaders();
 }
 
-export function addClient(res: Response, filters: { hackathonId?: string; teamId?: string }, lastId: number): Client {
-  const client: Client = { res, hackathonId: filters.hackathonId, teamId: filters.teamId, lastId };
+/** Format an outbox event as an SSE frame. Event id = outbox _id (ObjectId
+ * hex is timestamp-ordered) → stable across restarts and replayable. */
+export function formatSseEvent(event: OutboxEventDoc): string {
+  const data = JSON.stringify({
+    id: event._id.toString(),
+    type: event.eventType,
+    aggregateType: event.aggregateType,
+    aggregateId: event.aggregateId.toString(),
+    version: event.aggregateVersion,
+    payload: event.payload,
+    at: event.createdAt,
+  });
+  return `id: ${event._id.toString()}\nevent: ${event.eventType}\ndata: ${data}\n\n`;
+}
+
+/**
+ * May this subscriber see this event? Two layers:
+ *  1. Requested filters (hackathon/team) — always applied.
+ *  2. Event sensitivity — `submission.*` events carry status + check errors
+ *     and are private to team members and organizers; `team.*` events only
+ *     expose data already public on the board, so any authenticated user
+ *     inside the hackathon scope may receive them.
+ * Note: membership is resolved at connect time; a member who leaves keeps
+ * the stream until reconnect — acceptable for a short-lived access token.
+ */
+export function clientMaySee(scope: SubscriberScope, event: OutboxEventDoc): boolean {
+  const payload = event.payload as { hackathonId?: string; teamId?: string };
+  if (scope.hackathonId && payload.hackathonId !== scope.hackathonId) return false;
+  const eventTeamId = payload.teamId ?? event.aggregateId.toString();
+  if (scope.teamId && eventTeamId !== scope.teamId) return false;
+  if (event.eventType.startsWith('submission.')) {
+    return scope.isOrganizer || scope.memberTeamIds.has(eventTeamId);
+  }
+  return true;
+}
+
+export function addClient(res: Response, filters: { hackathonId?: string; teamId?: string }, lastId: number, scope: SubscriberScope): Client {
+  const client: Client = {
+    res,
+    hackathonId: filters.hackathonId,
+    teamId: filters.teamId,
+    memberTeamIds: scope.memberTeamIds,
+    isOrganizer: scope.isOrganizer,
+    lastId,
+  };
   clients.add(client);
   res.on('close', () => clients.delete(client));
   return client;
@@ -40,21 +94,11 @@ export function removeClient(res: Response): void {
 
 /** Fan out a committed outbox event to matching subscribers. */
 export function publishEvent(event: OutboxEventDoc): void {
-  lastEventSeq += 1;
-  const data = JSON.stringify({
-    id: lastEventSeq,
-    type: event.eventType,
-    aggregateType: event.aggregateType,
-    aggregateId: event.aggregateId.toString(),
-    version: event.aggregateVersion,
-    payload: event.payload,
-    at: event.createdAt,
-  });
+  const frame = formatSseEvent(event);
   for (const c of clients) {
-    if (c.hackathonId && (event.payload as { hackathonId?: string }).hackathonId !== c.hackathonId) continue;
-    if (c.teamId && event.aggregateId.toString() !== c.teamId) continue;
+    if (!clientMaySee(c, event)) continue;
     try {
-      c.res.write(`id: ${lastEventSeq}\nevent: ${event.eventType}\ndata: ${data}\n\n`);
+      c.res.write(frame);
     } catch {
       clients.delete(c);
     }

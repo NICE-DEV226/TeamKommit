@@ -10,6 +10,7 @@ import { AuditEvent } from '../../models/AuditEvent.js';
 import { validate } from '../middleware/common.js';
 import { requireAuth } from '../middleware/auth.js';
 import { createTeam, leaveTeam, createInviteCode } from '../../domain/teams.js';
+import { canonicalSkills } from '../../domain/taxonomy.js';
 import { suggestTeammates } from '../../domain/matching.js';
 import { DomainRejection, forbidden, notFound as nf } from '../../lib/errors.js';
 import { claimIdempotencyKey, finalizeIdempotencyKey } from '../../lib/idempotency.js';
@@ -92,7 +93,7 @@ teamsRouter.get('/board', validate(boardQuery, 'query'), asyncH(async (req, res)
 
 // ---------- People board ----------
 
-teamsRouter.get('/people', validate(z.object({
+teamsRouter.get('/teams/people', validate(z.object({
   hackathonId: oid.optional(),
   q: z.string().max(80).optional(),
 }), 'query'), asyncH(async (req, res) => {
@@ -183,6 +184,7 @@ teamsRouter.patch('/teams/:id', requireAuth, validate(z.object({ id: oid }), 'pa
   if (!team || team.lifecycleStatus !== 'ACTIVE') throw nf('Team not found');
   if (team.leaderId.toString() !== req.userId!.toString()) throw forbidden('Only the leader can update the team');
   const body = req.body as z.infer<typeof patchTeamSchema>;
+  if (body.skillsSought) body.skillsSought = canonicalSkills(body.skillsSought);
   if (body.maxSize !== undefined) {
     if (body.maxSize < team.memberCount) throw new DomainRejection('MAX_SIZE_BELOW_MEMBERS', 'maxSize cannot be below current member count', 422);
     const hack = await Hackathon.findById(team.hackathonId).lean();
@@ -214,6 +216,22 @@ teamsRouter.post('/teams/:id/invite-code', requireAuth, validate(z.object({ id: 
     actorId: req.userId!,
   });
   res.status(201).json(result);
+}));
+
+// Member opts in/out of leadership succession (OPT_IN_THEN_DISBAN policy).
+// Without this, the succession engine's openToLead flag is unreachable.
+const leadOptInSchema = z.object({ open: z.boolean() });
+teamsRouter.post('/teams/:id/lead-opt-in', requireAuth, validate(z.object({ id: oid }), 'params'), validate(leadOptInSchema), asyncH(async (req, res) => {
+  const team = await Team.findById(req.params.id).lean();
+  if (!team || team.lifecycleStatus !== 'ACTIVE') throw nf('Team not found');
+  const { open } = req.body as z.infer<typeof leadOptInSchema>;
+  const m = await Membership.findOneAndUpdate(
+    { teamId: team._id, participantId: req.userId, status: 'ACTIVE' },
+    { $set: { openToLead: open } },
+    { new: true },
+  ).lean();
+  if (!m) throw forbidden('Only active team members can opt in to leadership');
+  res.json({ openToLead: m.openToLead });
 }));
 
 // Leader removes a member (policy: leaders can remove; audited).

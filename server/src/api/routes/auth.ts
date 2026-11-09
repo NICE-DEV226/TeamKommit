@@ -6,6 +6,7 @@ import { User } from '../../models/User.js';
 import { validate } from '../middleware/common.js';
 import { requireAuth, signAccessToken, signRefreshToken } from '../middleware/auth.js';
 import { badRequest, unauthorized } from '../../lib/errors.js';
+import { canonicalSkill, canonicalSkills } from '../../domain/taxonomy.js';
 import jwt from 'jsonwebtoken';
 import { config } from '../../config.js';
 import rateLimit from 'express-rate-limit';
@@ -99,7 +100,17 @@ const profileSchema = z.object({
 
 authRouter.patch('/me', requireAuth, validate(profileSchema), async (req, res, next) => {
   try {
-    const user = await User.findByIdAndUpdate(req.userId, { $set: req.body }, { new: true }).lean();
+    // Canonicalize skills/roles on write — matching math depends on identity.
+    const update = { ...(req.body as Record<string, unknown>) };
+    if (Array.isArray(update.skills)) {
+      update.skills = (update.skills as { skill: string; level: number; canLead?: boolean }[])
+        .map((s) => ({ ...s, skill: canonicalSkill(s.skill) }))
+        .filter((s) => s.skill !== '');
+    }
+    if (Array.isArray(update.preferredRoles)) {
+      update.preferredRoles = canonicalSkills(update.preferredRoles as string[]);
+    }
+    const user = await User.findByIdAndUpdate(req.userId, { $set: update }, { new: true }).lean();
     res.json({ user: publicUser(user!) });
   } catch (err) { next(err); }
 });

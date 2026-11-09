@@ -1,7 +1,9 @@
 import { Types } from 'mongoose';
 import { Submission } from '../models/Submission.js';
 import { OutboxEvent } from '../models/OutboxEvent.js';
-import { runFileCheck } from './checks.js';
+import { Hackathon } from '../models/Hackathon.js';
+import { Pipeline } from '../models/Pipeline.js';
+import { runFileCheck, type PipelineStep } from './checks.js';
 
 interface CheckPayload {
   submissionId: string;
@@ -29,15 +31,23 @@ export async function handleSubmissionCheck(payload: CheckPayload): Promise<unkn
     { $set: { status: 'CHECKING' } },
   );
 
-  const { file, links } = await runFileCheck(submission.fileKey, submission.links);
-
-  const errors = [...file.errors];
-  if (links.failed.length > 0 && links.failed.length === submission.links.length && submission.links.length > 0) {
-    errors.push('All submitted links are unreachable');
+  // Resolve the organizer-configured validation pipeline for this event.
+  // No pipeline → runFileCheck falls back to the default step set.
+  let steps: PipelineStep[] | undefined;
+  let pipelineName: string | undefined;
+  const hackathon = await Hackathon.findById(submission.hackathonId).select('pipelineId').lean();
+  if (hackathon?.pipelineId) {
+    const pipeline = await Pipeline.findById(hackathon.pipelineId).select('name steps').lean();
+    if (pipeline) {
+      pipelineName = pipeline.name;
+      steps = pipeline.steps as unknown as PipelineStep[];
+    }
   }
-  const rejected = file.fileType === 'rejected' || file.isZipBomb || errors.some((e) => e.includes('exceeds'));
-  const needsFix = !rejected && (links.failed.length > 0 || file.fileType === 'unknown');
-  const status = rejected ? 'REJECTED' : needsFix ? 'NEEDS_FIX' : 'ACCEPTED';
+
+  const { file, links, verdict } = await runFileCheck(submission.fileKey, submission.links, steps);
+
+  const errors = verdict.problems;
+  const status = verdict.rejected ? 'REJECTED' : verdict.needsFix ? 'NEEDS_FIX' : 'ACCEPTED';
 
   const version = submission.version;
   await Submission.updateOne(
@@ -54,6 +64,10 @@ export async function handleSubmissionCheck(payload: CheckPayload): Promise<unkn
           linksFailed: links.failed,
           preview: file.preview,
           problems: errors,
+          pipeline: {
+            name: pipelineName ?? 'default',
+            steps: verdict.results,
+          },
         },
       },
     },

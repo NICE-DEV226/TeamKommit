@@ -1,5 +1,10 @@
 import { Schema, model, type InferSchemaType, type HydratedDocument } from 'mongoose';
 
+const stepResultSchema = new Schema(
+  { stepId: String, type: String, status: String, detail: String },
+  { _id: false },
+);
+
 // Immutable submission versions. "Last version before deadline counts" is
 // enforced by always appending a new doc; the effective submission is the
 // highest version with confirmedAt <= deadline (+ documented grace).
@@ -30,6 +35,11 @@ const submissionSchema = new Schema(
         linksFailed: { type: [String] },
         preview: { type: String },   // extracted README head or PDF page-1 text
         problems: { type: [String] },
+        // Which validation pipeline ran + per-step outcomes (explainability).
+        pipeline: {
+          name: { type: String },
+          steps: { type: [stepResultSchema], default: undefined },
+        },
       },
       default: undefined,
     },

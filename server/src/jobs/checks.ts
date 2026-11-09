@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import yauzl from 'yauzl';
 import { config } from '../config.js';
 import { downloadToFile } from '../storage/s3.js';
+import type { StepType } from '../models/Pipeline.js';
 
 export interface FileCheckResult {
   fileType: 'zip' | 'pdf' | 'image' | 'text' | 'unknown' | 'rejected';
@@ -100,44 +101,180 @@ export async function checkLinks(links: string[]): Promise<{ ok: string[]; faile
   return { ok, failed };
 }
 
+// ---------------------------------------------------------------------------
+// Pipeline evaluation — pure, testable. Facts are collected once; steps decide.
+// ---------------------------------------------------------------------------
+
+export interface PipelineStep {
+  stepId: string;
+  type: StepType;
+  enabled: boolean;
+  severity: 'reject' | 'warn';
+  config: Record<string, unknown>;
+}
+
+export interface CheckFacts {
+  fileType: FileCheckResult['fileType'];
+  fileBytes: number;
+  archiveEntries?: number;
+  uncompressedBytes?: number;
+  compressionRatio?: number;
+  hasReadme?: boolean;
+  linksOk: string[];
+  linksFailed: string[];
+  totalLinks: number;
+}
+
+export interface StepResult {
+  stepId: string;
+  type: StepType;
+  status: 'pass' | 'fail' | 'skipped';
+  detail?: string;
+}
+
+export interface PipelineVerdict {
+  rejected: boolean;
+  needsFix: boolean;
+  problems: string[];
+  results: StepResult[];
+}
+
+const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+
+/** Evaluate ordered pipeline steps against collected facts. */
+export function evaluateSteps(steps: PipelineStep[], facts: CheckFacts): PipelineVerdict {
+  const results: StepResult[] = [];
+  const problems: string[] = [];
+  let rejected = false;
+  let needsFix = false;
+
+  for (const step of steps) {
+    if (!step.enabled) {
+      results.push({ stepId: step.stepId, type: step.type, status: 'skipped' });
+      continue;
+    }
+    const fail = (detail: string): void => {
+      results.push({ stepId: step.stepId, type: step.type, status: 'fail', detail });
+      problems.push(`[${step.type}] ${detail}`);
+      if (step.severity === 'reject') rejected = true; else needsFix = true;
+    };
+    const pass = (detail?: string) => results.push({ stepId: step.stepId, type: step.type, status: 'pass', detail });
+
+    switch (step.type) {
+      case 'file-size': {
+        const maxMB = num(step.config.maxMB, 100);
+        if (facts.fileBytes > maxMB * 1024 * 1024) fail(`File exceeds ${maxMB} MB`);
+        else pass(`${(facts.fileBytes / 1024 / 1024).toFixed(1)} MB`);
+        break;
+      }
+      case 'allowed-types': {
+        const types = Array.isArray(step.config.types) ? step.config.types as string[] : [];
+        if (types.length === 0 || types.includes(facts.fileType)) pass(facts.fileType);
+        else fail(`File type "${facts.fileType}" not allowed (allowed: ${types.join(', ')})`);
+        break;
+      }
+      case 'archive-scan': {
+        if (facts.fileType !== 'zip') { pass('not an archive'); break; }
+        const maxEntries = num(step.config.maxEntries, config.submissions.maxZipEntries);
+        const maxRatio = num(step.config.maxRatio, config.submissions.zipBombRatio);
+        const maxUncompressedMB = num(step.config.maxUncompressedMB, 0);
+        const entries = facts.archiveEntries ?? 0;
+        const ratio = facts.compressionRatio ?? 0;
+        const uncompressedMB = (facts.uncompressedBytes ?? 0) / 1024 / 1024;
+        if (entries > maxEntries) fail(`Archive has too many entries (${entries} > ${maxEntries})`);
+        else if (maxUncompressedMB > 0 && uncompressedMB > maxUncompressedMB) fail(`Uncompressed size ${uncompressedMB.toFixed(0)} MB exceeds ${maxUncompressedMB} MB`);
+        else if (ratio > maxRatio) fail(`Suspected zip bomb: compression ratio ${ratio.toFixed(0)}:1`);
+        else pass(`${entries} entries, ratio ${ratio.toFixed(0)}:1`);
+        break;
+      }
+      case 'link-check': {
+        if (facts.totalLinks === 0) { pass('no links submitted'); break; }
+        if (facts.linksFailed.length === 0) pass(`${facts.linksOk.length}/${facts.totalLinks} links OK`);
+        else if (facts.linksFailed.length === facts.totalLinks) fail(`All ${facts.totalLinks} submitted links are unreachable`);
+        else fail(`${facts.linksFailed.length}/${facts.totalLinks} links unreachable`);
+        break;
+      }
+      case 'readme-required': {
+        if (facts.fileType !== 'zip') { pass('not an archive'); break; }
+        if (facts.hasReadme) pass('README found');
+        else fail('Archive has no README (readme.md/txt at any depth)');
+        break;
+      }
+    }
+  }
+  return { rejected, needsFix, problems, results };
+}
+
+/** Default pipeline = historical behavior, expressed as steps. */
+export function defaultSteps(): PipelineStep[] {
+  return [
+    { stepId: 'size', type: 'file-size', enabled: true, severity: 'reject', config: { maxMB: 100 } },
+    { stepId: 'types', type: 'allowed-types', enabled: true, severity: 'warn', config: { types: ['zip', 'pdf', 'image', 'text'] } },
+    { stepId: 'archive', type: 'archive-scan', enabled: true, severity: 'reject', config: { maxEntries: config.submissions.maxZipEntries, maxRatio: config.submissions.zipBombRatio, maxUncompressedMB: 0 } },
+    { stepId: 'links', type: 'link-check', enabled: true, severity: 'warn', config: {} },
+  ];
+}
+
 /**
  * Full background check for one submission file.
  * Downloads to a temp file (API server never holds the bytes), sniffs the
- * real type from magic bytes — never the extension — scans zips for bombs.
+ * real type from magic bytes — never the extension — then evaluates the
+ * pipeline steps (organizer-configured or defaults).
  */
-export async function runFileCheck(s3Key: string, links: string[]): Promise<{
+export async function runFileCheck(
+  s3Key: string,
+  links: string[],
+  steps?: PipelineStep[],
+): Promise<{
   file: FileCheckResult;
   links: { ok: string[]; failed: string[] };
+  verdict: PipelineVerdict;
 }> {
   const tmp = join(tmpdir(), `tk-check-${randomUUID()}`);
-  const errors: string[] = [];
   try {
     const size = await downloadToFile(s3Key, tmp);
-    if (size > config.submissions.maxFileBytes) {
-      return { file: { fileType: 'rejected', isZipBomb: false, errors: ['File exceeds 100 MB'] }, links: { ok: [], failed: links } };
-    }
-    const fileType = await detectType(tmp);
-    const file: FileCheckResult = { fileType, isZipBomb: false, errors };
+    const file: FileCheckResult = { fileType: 'unknown', isZipBomb: false, errors: [] };
+    const linkResult = { ok: [] as string[], failed: [] as string[] };
 
-    if (fileType === 'zip') {
+    if (size > config.submissions.maxFileBytes) {
+      file.fileType = 'rejected';
+      file.errors.push('File exceeds 100 MB');
+      const verdict = evaluateSteps(steps ?? defaultSteps(), {
+        fileType: 'rejected', fileBytes: size, linksOk: [], linksFailed: links, totalLinks: links.length,
+      });
+      return { file, links: linkResult, verdict };
+    }
+
+    file.fileType = await detectType(tmp);
+    const facts: CheckFacts = {
+      fileType: file.fileType, fileBytes: size,
+      linksOk: [], linksFailed: [], totalLinks: links.length,
+    };
+
+    if (file.fileType === 'zip') {
       const scan = await scanZip(tmp);
       file.archiveEntries = scan.entries;
       file.uncompressedBytes = scan.uncompressed;
-      const ratio = scan.uncompressed / Math.max(1, size);
-      if (scan.truncated || scan.entries > config.submissions.maxZipEntries) {
-        file.isZipBomb = true;
-        errors.push(`Archive has too many entries (${scan.entries})`);
-      } else if (ratio > config.submissions.zipBombRatio) {
-        file.isZipBomb = true;
-        errors.push(`Suspected zip bomb: compression ratio ${ratio.toFixed(0)}:1`);
-      }
+      facts.archiveEntries = scan.entries;
+      facts.uncompressedBytes = scan.uncompressed;
+      facts.compressionRatio = scan.uncompressed / Math.max(1, size);
+      facts.hasReadme = !!scan.readme;
       if (scan.readme) file.preview = scan.readme.slice(0, 2000);
-    } else if (fileType === 'pdf') {
+    } else if (file.fileType === 'pdf') {
       file.preview = await pdfPreview(tmp);
     }
 
-    const linkResult = await checkLinks(links);
-    return { file, links: linkResult };
+    const linkRes = await checkLinks(links);
+    linkResult.ok = linkRes.ok;
+    linkResult.failed = linkRes.failed;
+    facts.linksOk = linkRes.ok;
+    facts.linksFailed = linkRes.failed;
+
+    const verdict = evaluateSteps(steps ?? defaultSteps(), facts);
+    // Back-compat fields for existing UI/CSV consumers.
+    file.isZipBomb = verdict.results.some((r) => r.type === 'archive-scan' && r.status === 'fail');
+    file.errors = verdict.problems;
+    return { file, links: linkResult, verdict };
   } finally {
     await import('node:fs/promises').then((fs) => fs.rm(tmp, { force: true })).catch(() => {});
   }

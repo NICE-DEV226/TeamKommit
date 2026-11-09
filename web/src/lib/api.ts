@@ -18,6 +18,17 @@ export function setTokens(access: string | null, refresh: string | null) {
 export function getRefreshToken() { return refreshToken; }
 export function isLoggedIn() { return !!accessToken; }
 
+/** Access tokens live 15 min — SSE/EventSource reconnects must not present
+ * an expired JWT. Decode exp and refresh when under 60s remain. */
+export async function ensureAccessToken(): Promise<string | null> {
+  if (!accessToken) return null;
+  try {
+    const payload = JSON.parse(atob(accessToken.split('.')[1]));
+    if (typeof payload.exp === 'number' && payload.exp * 1000 - Date.now() > 60_000) return accessToken;
+  } catch { /* malformed → try refresh anyway */ }
+  return (await tryRefresh()) ? accessToken : null;
+}
+
 async function rawFetch(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
   const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
   if (init.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
@@ -58,3 +69,4 @@ export const post = <T = unknown>(path: string, body?: unknown, headers?: Record
   api<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body), headers });
 export const patch = <T = unknown>(path: string, body: unknown) =>
   api<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
+export const del = <T = unknown>(path: string) => api<T>(path, { method: 'DELETE' });

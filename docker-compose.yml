@@ -28,7 +28,9 @@ services:
       retries: 10
 
   server:
-    build: ./server
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     depends_on:
       mongo:
         condition: service_healthy
@@ -51,15 +53,19 @@ services:
       - "4000:4000"
 
   web:
-    build: ./web
+    build:
+      context: .
+      dockerfile: web/Dockerfile
     depends_on:
       - server
     ports:
       - "5173:80"
 
   worker:
-    build: ./server
-    command: node dist/worker.js
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    command: node server/dist/worker.js
     depends_on:
       mongo:
         condition: service_healthy

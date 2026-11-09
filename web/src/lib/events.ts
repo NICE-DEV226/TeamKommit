@@ -1,28 +1,38 @@
 import { useEffect, useRef } from 'react';
-import { getRefreshToken } from './api';
+import { getRefreshToken, ensureAccessToken } from './api';
 
 /**
  * SSE client with automatic reconnect + Last-Event-ID replay.
  * The server pushes committed domain events; the UI invalidates queries.
  */
-export function useLiveEvents(onEvent: (type: string, payload: unknown) => void, filters: { hackathonId?: string; teamId?: string } = {}) {
+export function useLiveEvents(
+  onEvent: (type: string, payload: unknown) => void,
+  filters: { hackathonId?: string; teamId?: string } = {},
+  onStatus?: (connected: boolean) => void,
+  enabled = true,
+) {
   const cb = useRef(onEvent);
   cb.current = onEvent;
   const filterKey = `${filters.hackathonId ?? ''}:${filters.teamId ?? ''}`;
 
   useEffect(() => {
+    if (!enabled) { onStatus?.(false); return; }
     let es: EventSource | null = null;
     let stopped = false;
-    let lastId = 0;
+    let lastId = '';
 
-    const connect = () => {
+    const connect = async () => {
       if (stopped) return;
+      const token = await ensureAccessToken();
+      if (stopped) return;
+      if (!token) { onStatus?.(false); return; } // session gone — stop retrying
       const params = new URLSearchParams();
       if (filters.hackathonId) params.set('hackathonId', filters.hackathonId);
       if (filters.teamId) params.set('teamId', filters.teamId);
-      if (lastId) params.set('lastEventId', String(lastId));
-      // EventSource can't set headers; token via query for the demo deploy.
-      // (Access tokens are short-lived; refresh handled on reconnect.)
+      if (lastId) params.set('lastEventId', lastId);
+      // EventSource can't set headers — access token goes via ?token= (accepted
+      // only on /api/events; short-lived JWT, refreshed on every reconnect).
+      params.set('token', token);
       es = new EventSource(`/api/events?${params}`);
       es.onmessage = (e) => {
         try {
@@ -42,12 +52,17 @@ export function useLiveEvents(onEvent: (type: string, payload: unknown) => void,
           } catch { /* ignore */ }
         });
       }
-      es.onerror = () => { es?.close(); setTimeout(connect, 3000); };
+      es.onopen = () => onStatus?.(true);
+      es.onerror = () => {
+        onStatus?.(false);
+        es?.close();
+        setTimeout(connect, 3000);
+      };
     };
     connect();
     return () => { stopped = true; es?.close(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterKey]);
+  }, [filterKey, enabled]);
 }
 
 export function useAuthToken(): string | null {
