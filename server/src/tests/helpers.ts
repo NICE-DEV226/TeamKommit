@@ -37,6 +37,7 @@ export async function connectModels() {
   await import('../models/UploadSession.js');
   await import('../models/Submission.js');
   await import('../models/Job.js');
+  await import('../models/Pipeline.js');
   await Promise.all([
     mongoose.model('Hackathon').syncIndexes(),
     mongoose.model('User').syncIndexes(),
@@ -50,6 +51,7 @@ export async function connectModels() {
     mongoose.model('UploadSession').syncIndexes(),
     mongoose.model('Submission').syncIndexes(),
     mongoose.model('Job').syncIndexes(),
+    mongoose.model('Pipeline').syncIndexes(),
   ]);
 }
 

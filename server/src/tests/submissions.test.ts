@@ -61,6 +61,34 @@ describe('submissions API', () => {
     expect(out.body.error.code).toBe('DEADLINE_PASSED');
   });
 
+  it('accepts metadata confirmation inside the documented grace window', async () => {
+    // Deadline passed 10 min ago — still inside graceConfirmMin (30).
+    const hackathon = await makeHackathon({ submissionDeadline: new Date(Date.now() - 10 * 60_000) });
+    const leader = await makeUser({ isOrganizer: true });
+    const res = await createTeam({ hackathonId: hackathon._id as Types.ObjectId, creatorId: leader._id as Types.ObjectId, name: 'GraceTeam', maxSize: 3 });
+    if (!res.ok) throw new Error('setup');
+    const out = await request(app).post('/api/submissions').set(auth(leader._id as Types.ObjectId)).send({
+      hackathonId: hackathon._id.toString(), teamId: res.teamId.toString(), title: 'within grace',
+    });
+    expect(out.status).toBe(201);
+    expect(out.body.submission.status).toBe('UPLOADING');
+  });
+
+  it('CSV export contains actual submission rows', async () => {
+    const { hackathon, leader, teamId } = await teamWithMember();
+    await Submission.create({
+      hackathonId: hackathon._id, teamId, version: 1,
+      title: 'CSV-PROBE-TITLE', description: '', links: [],
+      fileName: 'probe.zip', fileSize: 1234, fileKey: 'k',
+      status: 'ACCEPTED', submittedBy: leader._id, confirmedAt: new Date(),
+    });
+    const csv = await request(app).get('/api/submissions/admin/export.csv').set(auth(leader._id as Types.ObjectId));
+    expect(csv.status).toBe(200);
+    expect(csv.text).toContain('CSV-PROBE-TITLE');
+    expect(csv.text).toContain(teamId.toString());
+    expect(csv.text).toContain('ACCEPTED');
+  });
+
   it('organizer stats + CSV export require organizer role', async () => {
     const { leader } = await teamWithMember();
     const nonOrg = await makeUser();
