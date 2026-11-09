@@ -52,7 +52,7 @@ export default function PipelinesPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-mono text-xs font-bold tracking-[0.2em] text-sunny-400">// VALIDATION</p>
+          <p className="font-mono text-xs font-bold tracking-[0.2em] text-grape-400">// VALIDATION</p>
           <h1 className="mt-2 text-3xl font-extrabold tracking-tight">Submission pipelines</h1>
           <p className="mt-1.5 text-sm font-semibold text-cream/50">
             Ordered check steps applied to every submission of an event. Drag to reorder — first failure decides.
@@ -174,7 +174,7 @@ function PipelineEditor({ pipeline, onClose, onSaved }: {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <button onClick={guardedClose} className="mb-2 text-xs font-extrabold text-cream/50 hover:text-cream">← All pipelines</button>
-          <p className="font-mono text-xs font-bold tracking-[0.2em] text-sunny-400">// PIPELINE EDITOR{dirty ? ' · UNSAVED' : ''}</p>
+          <p className="font-mono text-xs font-bold tracking-[0.2em] text-grape-400">// PIPELINE EDITOR{dirty ? ' · UNSAVED' : ''}</p>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Pipeline name"
             className="mt-2 w-full max-w-md rounded-xl border-2 border-cream/25 bg-white/[0.06] px-4 py-2.5 text-xl font-extrabold text-cream placeholder:text-cream/30 focus:border-sunny-400 focus:outline-none" />
         </div>

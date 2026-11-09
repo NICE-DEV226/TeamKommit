@@ -32,7 +32,7 @@ export default function HackathonsPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-mono text-xs font-bold tracking-[0.2em] text-sunny-400">// EVENTS</p>
+          <p className="font-mono text-xs font-bold tracking-[0.2em] text-sky-400">// EVENTS</p>
           <h1 className="mt-2 text-3xl font-extrabold tracking-tight">Hackathons</h1>
           <p className="mt-1.5 text-sm font-semibold text-cream/50">Create events, attach pipelines, drill into teams.</p>
         </div>

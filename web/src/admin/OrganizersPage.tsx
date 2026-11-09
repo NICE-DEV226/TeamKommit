@@ -23,7 +23,7 @@ export default function OrganizersPage() {
   return (
     <div className="space-y-6">
       <header>
-        <p className="font-mono text-xs font-bold tracking-[0.2em] text-sunny-400">// ACCESS</p>
+        <p className="font-mono text-xs font-bold tracking-[0.2em] text-mint-400">// ACCESS</p>
         <h1 className="mt-2 text-3xl font-extrabold tracking-tight">Organizers</h1>
         <p className="mt-1.5 text-sm font-semibold text-cream/50">Who can open this console. Grant by account email.</p>
       </header>
