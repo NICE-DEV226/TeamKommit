@@ -3,6 +3,7 @@ import { Hackathon } from './models/Hackathon.js';
 import { User } from './models/User.js';
 import { Team } from './models/Team.js';
 import { Membership } from './models/Membership.js';
+import { makePersona, SKILL_IDS as SKILLS } from './personas.js';
 import bcrypt from 'bcryptjs';
 
 /**
@@ -12,8 +13,6 @@ import bcrypt from 'bcryptjs';
 const N_USERS = 10_000;
 const N_TEAMS = 2_000;
 const TEAM_SIZE = 5;
-const SKILLS = ['frontend', 'backend', 'fullstack', 'mobile', 'devops', 'data', 'ml', 'security', 'design', 'product'];
-const ROLES = ['frontend', 'backend', 'fullstack', 'mobile', 'devops', 'data', 'ml', 'design'];
 
 function mulberry32(seed: number) {
   return () => {
@@ -24,7 +23,6 @@ function mulberry32(seed: number) {
   };
 }
 const rand = mulberry32(42);
-const pick = <T>(arr: T[]): T => arr[Math.floor(rand() * arr.length)]!;
 
 async function main() {
   await connectDb();
@@ -60,23 +58,11 @@ async function main() {
   const passwordHash = await bcrypt.hash('password123', 10);
   const userDocs = [];
   for (let i = 0; i < N_USERS; i++) {
-    const skillCount = 2 + Math.floor(rand() * 4);
-    const skills = Array.from({ length: skillCount }, () => ({
-      skill: pick(SKILLS),
-      level: Math.round((0.3 + rand() * 0.7) * 100) / 100,
-      canLead: rand() > 0.6,
-    }));
+    const persona = makePersona(rand, i);
     userDocs.push({
       email: `user${i}@seed.teamkommit.dev`,
       passwordHash,
-      displayName: `SeedUser ${i}`,
-      bio: `Hacker #${i} into ${skills.map((s) => s.skill).join(', ')}`,
-      timezone: pick(['UTC', 'Europe/Paris', 'America/New_York', 'Asia/Tokyo', 'Australia/Sydney']),
-      skills,
-      preferredRoles: [pick(ROLES)],
-      availability: [{ startMin: 540 + Math.floor(rand() * 600), endMin: 1080 + Math.floor(rand() * 300) }],
-      lookingForTeam: rand() > 0.5,
-      discoverable: true,
+      ...persona,
     });
   }
   const users = await User.insertMany(userDocs, { ordered: false });
