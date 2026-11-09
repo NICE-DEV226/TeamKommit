@@ -4,6 +4,7 @@ import { setupTestDb, teardownTestDb } from './helpers.js';
 import { enqueueJob, claimJob, completeJob, failJob } from '../jobs/queue.js';
 import { Job } from '../models/Job.js';
 import { detectAndScanFixture } from './check-fixtures.js';
+import { evaluateSteps, defaultSteps } from '../jobs/checks.js';
 
 beforeAll(setupTestDb);
 afterAll(teardownTestDb);
@@ -63,5 +64,21 @@ describe('file checks — content sniffing & zip bombs', () => {
   it('flags a zip bomb by compression ratio', async () => {
     const bomb = await detectAndScanFixture('zipbomb');
     expect(bomb.isZipBomb).toBe(true);
+  });
+
+  it('corrupt zip (PK magic, bad body) fails archive-scan instead of crashing the job', async () => {
+    // Regression: runFileCheck used to let scanZip throw → job retried 5x →
+    // FAILED → submission wedged in CHECKING forever. Now the parse error is
+    // a fact and the archive-scan step fails cleanly.
+    const verdict = evaluateSteps(defaultSteps(), {
+      fileType: 'zip', fileBytes: 26,
+      archiveError: 'End of central directory record signature not found',
+      linksOk: [], linksFailed: [], totalLinks: 0,
+    });
+    expect(verdict.rejected).toBe(true);
+    const step = verdict.results.find((r) => r.type === 'archive-scan');
+    expect(step?.status).toBe('fail');
+    expect(step?.detail).toContain('corrupt or unreadable');
+    expect(verdict.problems.join(' ')).toContain('corrupt or unreadable');
   });
 });

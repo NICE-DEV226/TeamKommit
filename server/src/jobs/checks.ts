@@ -120,6 +120,8 @@ export interface CheckFacts {
   uncompressedBytes?: number;
   compressionRatio?: number;
   hasReadme?: boolean;
+  /** Set when the file sniffs as zip but the archive can't be parsed. */
+  archiveError?: string;
   linksOk: string[];
   linksFailed: string[];
   totalLinks: number;
@@ -175,6 +177,7 @@ export function evaluateSteps(steps: PipelineStep[], facts: CheckFacts): Pipelin
       }
       case 'archive-scan': {
         if (facts.fileType !== 'zip') { pass('not an archive'); break; }
+        if (facts.archiveError) { fail(`Archive is corrupt or unreadable: ${facts.archiveError}`); break; }
         const maxEntries = num(step.config.maxEntries, config.submissions.maxZipEntries);
         const maxRatio = num(step.config.maxRatio, config.submissions.zipBombRatio);
         const maxUncompressedMB = num(step.config.maxUncompressedMB, 0);
@@ -239,8 +242,10 @@ export async function runFileCheck(
     if (size > config.submissions.maxFileBytes) {
       file.fileType = 'rejected';
       file.errors.push('File exceeds 100 MB');
+      // Links are never checked on this path — report them as absent rather
+      // than fabricating "all links unreachable" failures.
       const verdict = evaluateSteps(steps ?? defaultSteps(), {
-        fileType: 'rejected', fileBytes: size, linksOk: [], linksFailed: links, totalLinks: links.length,
+        fileType: 'rejected', fileBytes: size, linksOk: [], linksFailed: [], totalLinks: 0,
       });
       return { file, links: linkResult, verdict };
     }
@@ -252,14 +257,21 @@ export async function runFileCheck(
     };
 
     if (file.fileType === 'zip') {
-      const scan = await scanZip(tmp);
-      file.archiveEntries = scan.entries;
-      file.uncompressedBytes = scan.uncompressed;
-      facts.archiveEntries = scan.entries;
-      facts.uncompressedBytes = scan.uncompressed;
-      facts.compressionRatio = scan.uncompressed / Math.max(1, size);
-      facts.hasReadme = !!scan.readme;
-      if (scan.readme) file.preview = scan.readme.slice(0, 2000);
+      try {
+        const scan = await scanZip(tmp);
+        file.archiveEntries = scan.entries;
+        file.uncompressedBytes = scan.uncompressed;
+        facts.archiveEntries = scan.entries;
+        facts.uncompressedBytes = scan.uncompressed;
+        facts.compressionRatio = scan.uncompressed / Math.max(1, size);
+        facts.hasReadme = !!scan.readme;
+        if (scan.readme) file.preview = scan.readme.slice(0, 2000);
+      } catch (err) {
+        // Magic bytes said zip but the archive is corrupt/truncated — a
+        // checkable failure, NOT a job crash (which would wedge the
+        // submission in CHECKING after retries exhaust).
+        facts.archiveError = (err as Error).message.slice(0, 200);
+      }
     } else if (file.fileType === 'pdf') {
       file.preview = await pdfPreview(tmp);
     }
@@ -271,6 +283,12 @@ export async function runFileCheck(
     facts.linksFailed = linkRes.failed;
 
     const verdict = evaluateSteps(steps ?? defaultSteps(), facts);
+    // A corrupt archive is objectively broken — surface it even when the
+    // configured pipeline has no archive-scan step to consume archiveError.
+    if (facts.archiveError && !verdict.results.some((r) => r.type === 'archive-scan' && r.status === 'fail')) {
+      verdict.problems.push(`[archive] Archive is corrupt or unreadable: ${facts.archiveError}`);
+      verdict.needsFix = true;
+    }
     // Back-compat fields for existing UI/CSV consumers.
     file.isZipBomb = verdict.results.some((r) => r.type === 'archive-scan' && r.status === 'fail');
     file.errors = verdict.problems;
