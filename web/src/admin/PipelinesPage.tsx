@@ -15,6 +15,7 @@ import {
   Pipeline, PipelineStep, StepType, STEP_META,
   panel, panelTitle, inputDark, labelDark,
 } from './shared';
+import { toast, confirmDialog } from './overlays';
 
 const FILE_TYPES = ['zip', 'pdf', 'image', 'text'] as const;
 
@@ -79,9 +80,16 @@ export default function PipelinesPage() {
                   setEditing({ ...full.pipeline, stepCount: p.stepCount, usedBy: p.usedBy });
                 }} className="rounded-lg border border-cream/25 px-3 py-1.5 text-xs font-extrabold text-cream/80 hover:bg-white/5">Edit</button>
                 <button onClick={async () => {
-                  if (!window.confirm(`Delete pipeline "${p.name}"? Events using it fall back to default checks.`)) return;
-                  try { await del(`/admin/pipelines/${p._id}`); qc.invalidateQueries({ queryKey: ['admin', 'pipelines'] }); qc.invalidateQueries({ queryKey: ['admin', 'hackathons'] }); }
-                  catch (e) { window.alert(e instanceof ApiError ? e.message : 'Delete failed'); }
+                  const ok = await confirmDialog({
+                    title: `Delete "${p.name}"?`,
+                    body: (p.usedBy ?? 0) > 0
+                      ? `${p.usedBy} event${p.usedBy! > 1 ? 's' : ''} use this pipeline — they'll fall back to default checks.`
+                      : 'Events using it will fall back to default checks.',
+                    danger: true,
+                  });
+                  if (!ok) return;
+                  try { await del(`/admin/pipelines/${p._id}`); toast('Pipeline deleted'); qc.invalidateQueries({ queryKey: ['admin', 'pipelines'] }); qc.invalidateQueries({ queryKey: ['admin', 'hackathons'] }); }
+                  catch (e) { toast(e instanceof ApiError ? e.message : 'Delete failed', 'err'); }
                 }} className="rounded-lg border border-bubble-400/50 px-3 py-1.5 text-xs font-extrabold text-bubble-400 hover:bg-bubble-400/10">Delete</button>
               </div>
             </div>
@@ -114,11 +122,19 @@ export default function PipelinesPage() {
 function PipelineEditor({ pipeline, onClose, onSaved }: {
   pipeline: Pipeline | null; onClose: () => void; onSaved: () => void;
 }) {
-  const [name, setName] = useState(pipeline?.name ?? '');
-  const [steps, setSteps] = useState<PipelineStep[]>(pipeline?.steps ?? [newStep('file-size'), newStep('allowed-types'), newStep('archive-scan'), newStep('link-check')]);
+  const initialName = pipeline?.name ?? '';
+  const initialSteps = pipeline?.steps ?? [newStep('file-size'), newStep('allowed-types'), newStep('archive-scan'), newStep('link-check')];
+  const [name, setName] = useState(initialName);
+  const [steps, setSteps] = useState<PipelineStep[]>(initialSteps);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
+  const dirty = name !== initialName || JSON.stringify(steps) !== JSON.stringify(initialSteps);
+
+  async function guardedClose() {
+    if (dirty && !(await confirmDialog({ title: 'Discard changes?', body: 'Your pipeline edits will be lost.', danger: true }))) return;
+    onClose();
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -147,6 +163,7 @@ function PipelineEditor({ pipeline, onClose, onSaved }: {
     try {
       if (pipeline) await patch(`/admin/pipelines/${pipeline._id}`, { name, steps });
       else await post('/admin/pipelines', { name, steps });
+      toast(pipeline ? 'Pipeline saved' : 'Pipeline created');
       onSaved();
     } catch (e) { setError(e instanceof ApiError ? e.message : 'Save failed'); }
     finally { setBusy(false); }
@@ -156,17 +173,22 @@ function PipelineEditor({ pipeline, onClose, onSaved }: {
     <div className="space-y-5">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <button onClick={onClose} className="mb-2 text-xs font-extrabold text-cream/50 hover:text-cream">← All pipelines</button>
-          <p className="font-mono text-xs font-bold tracking-[0.2em] text-sunny-400">// PIPELINE EDITOR</p>
+          <button onClick={guardedClose} className="mb-2 text-xs font-extrabold text-cream/50 hover:text-cream">← All pipelines</button>
+          <p className="font-mono text-xs font-bold tracking-[0.2em] text-sunny-400">// PIPELINE EDITOR{dirty ? ' · UNSAVED' : ''}</p>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Pipeline name"
             className="mt-2 w-full max-w-md rounded-xl border-2 border-cream/25 bg-white/[0.06] px-4 py-2.5 text-xl font-extrabold text-cream placeholder:text-cream/30 focus:border-sunny-400 focus:outline-none" />
         </div>
         <div className="flex gap-2">
-          <button onClick={onClose} className="rounded-lg border border-cream/25 px-4 py-2 text-xs font-extrabold text-cream/60 hover:bg-white/5">Cancel</button>
+          <button onClick={guardedClose} className="rounded-lg border border-cream/25 px-4 py-2 text-xs font-extrabold text-cream/60 hover:bg-white/5">Cancel</button>
           <button onClick={save} disabled={busy || name.trim().length < 2} className="btn-sunny btn-sm">{busy ? 'Saving…' : pipeline ? 'Save changes' : 'Create pipeline'}</button>
         </div>
       </header>
       {error && <p role="alert" className="text-sm font-extrabold text-bubble-400">{error}</p>}
+      {(pipeline?.usedBy ?? 0) > 0 && (
+        <p className="rounded-xl border border-sunny-400/40 bg-sunny-400/10 px-4 py-2.5 text-xs font-extrabold text-sunny-400">
+          ⚠ This pipeline is attached to {pipeline!.usedBy} event{pipeline!.usedBy! > 1 ? 's' : ''} — changes apply to new submissions immediately.
+        </p>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
         {/* Palette */}

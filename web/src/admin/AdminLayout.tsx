@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { get, isLoggedIn, ApiError } from '../lib/api';
 import { usePageTitle } from '../components/feedback';
 import { CommitMark } from '../components/doodles';
+import { Overlays } from './overlays';
 
 const NAV = [
   { to: '/admin', label: 'Overview', end: true },
@@ -47,7 +48,8 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-ink text-cream">
+    <div className="admin-scope min-h-screen bg-ink text-cream">
+      <Overlays />
       <div className="mx-auto flex max-w-6xl gap-8 px-4 py-6 sm:px-6">
         {/* Sidebar — desktop */}
         <aside className="hidden w-52 shrink-0 md:block">

@@ -42,13 +42,13 @@ export default function OverviewPage() {
         <h2 className={panelTitle}>Submission deadlines</h2>
         <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {overview.hackathons.map((h) => (
-            <DeadlineCard key={h._id} name={h.name} deadline={h.submissionDeadline} opensAt={h.submissionOpensAt} now={now} />
+            <DeadlineCard key={h._id} name={h.name} deadline={h.submissionDeadline} opensAt={h.submissionOpensAt} now={now} href={`/admin/hackathons/${h._id}`} />
           ))}
           {overview.hackathons.length === 0 && <p className="text-sm font-semibold text-cream/40">No hackathons yet.</p>}
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4" aria-live="polite" aria-label="Key metrics">
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-4" aria-label="Key metrics">
         {[
           ['Total submissions', data.total, 'text-sunny-400'],
           ['Late attempts', data.lateAttempts, data.lateAttempts > 0 ? 'text-bubble-400' : 'text-cream'],

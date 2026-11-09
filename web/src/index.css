@@ -49,6 +49,11 @@ body {
   @apply outline-[3px] outline-offset-2 outline-ink;
 }
 
+/* Admin console is dark — the default ink focus ring is invisible there. */
+.admin-scope :focus-visible {
+  outline-color: var(--color-sunny-400);
+}
+
 .skip-link {
   @apply sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-sunny-400 focus:text-ink focus:px-4 focus:py-2 focus:rounded-full focus:border-2 focus:border-ink;
 }

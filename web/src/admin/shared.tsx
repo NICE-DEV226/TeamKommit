@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { DeadlineClock, Confetti } from '../components/doodles';
 
 export interface Stats {
@@ -76,34 +77,40 @@ export function useNow(intervalMs = 1000) {
   return now;
 }
 
-export function DeadlineCard({ name, deadline, opensAt, now }: {
-  name: string; deadline?: string; opensAt?: string; now: number;
+export function DeadlineCard({ name, deadline, opensAt, now, href }: {
+  name: string; deadline?: string; opensAt?: string; now: number; href?: string;
 }) {
-  if (!deadline) {
-    return <div className={`${panel} p-4`}><p className="truncate text-sm font-extrabold text-cream/80">{name}</p>
-      <p className="mt-1 text-xs font-semibold text-cream/40">No submission deadline set</p></div>;
-  }
-  const ms = new Date(deadline).getTime() - now;
-  const open = opensAt ? new Date(opensAt).getTime() <= now : true;
-  const abs = Math.abs(ms);
-  const d = Math.floor(abs / 86400000);
-  const h = Math.floor((abs % 86400000) / 3600000);
-  const m = Math.floor((abs % 3600000) / 60000);
-  const s = Math.floor((abs % 60000) / 1000);
-  const overdue = ms < 0;
-  const urgent = !overdue && ms < 6 * 3600000;
-  return (
-    <div className={`${panel} relative overflow-hidden p-4 ${urgent ? 'border-sunny-400/60' : ''}`}>
-      <DeadlineClock className={`absolute -right-1 -top-1 h-16 w-16 rotate-12 ${urgent ? 'text-sunny-400' : 'text-cream/15'}`} />
-      <p className="truncate text-sm font-extrabold text-cream/80">{name}</p>
-      <p className={`mt-1.5 font-mono text-xl font-extrabold tabular-nums ${overdue ? 'text-bubble-400' : urgent ? 'text-sunny-400' : 'text-cream'}`}>
-        {overdue ? 'CLOSED ' : ''}{d > 0 ? `${d}d ` : ''}{String(h).padStart(2, '0')}:{String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}
-      </p>
-      <p className="mt-0.5 text-[11px] font-bold text-cream/45">
-        {overdue ? 'deadline passed — grace applies' : open ? 'submissions open' : 'opens ' + new Date(opensAt!).toLocaleString()}
-      </p>
-    </div>
-  );
+  const body = (() => {
+    if (!deadline) {
+      return <><p className="truncate text-sm font-extrabold text-cream/80">{name}</p>
+        <p className="mt-1 text-xs font-semibold text-cream/40">No submission deadline set</p></>;
+    }
+    const ms = new Date(deadline).getTime() - now;
+    const open = opensAt ? new Date(opensAt).getTime() <= now : true;
+    const abs = Math.abs(ms);
+    const d = Math.floor(abs / 86400000);
+    const h = Math.floor((abs % 86400000) / 3600000);
+    const m = Math.floor((abs % 3600000) / 60000);
+    const s = Math.floor((abs % 60000) / 1000);
+    const overdue = ms < 0;
+    const urgent = !overdue && ms < 6 * 3600000;
+    return (
+      <>
+        <DeadlineClock className={`absolute -right-1 -top-1 h-16 w-16 rotate-12 ${urgent ? 'text-sunny-400' : 'text-cream/15'}`} />
+        <p className="truncate text-sm font-extrabold text-cream/80">{name}</p>
+        <p className={`mt-1.5 font-mono text-xl font-extrabold tabular-nums ${overdue ? 'text-bubble-400' : urgent ? 'text-sunny-400' : 'text-cream'}`}>
+          {overdue ? 'CLOSED ' : ''}{d > 0 ? `${d}d ` : ''}{String(h).padStart(2, '0')}:{String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}
+        </p>
+        <p className="mt-0.5 text-[11px] font-bold text-cream/55">
+          {overdue ? 'deadline passed — grace applies' : open ? 'submissions open' : 'opens ' + new Date(opensAt!).toLocaleString()}
+        </p>
+      </>
+    );
+  })();
+  const cls = `${panel} relative block overflow-hidden p-4 transition-colors ${href ? 'hover:border-sunny-400/50' : ''}`;
+  return href
+    ? <Link to={href} className={cls}>{body}</Link>
+    : <div className={cls}>{body}</div>;
 }
 
 export function LateEmpty() {

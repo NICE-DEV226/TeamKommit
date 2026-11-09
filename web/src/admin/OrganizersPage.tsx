@@ -3,13 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post, ApiError } from '../lib/api';
 import { usePageTitle } from '../components/feedback';
 import { Organizer, panel, panelTitle, inputDark, labelDark } from './shared';
+import { toast, confirmDialog } from './overlays';
 
 export default function OrganizersPage() {
   usePageTitle('Organizers · Organizer');
   const qc = useQueryClient();
   const [email, setEmail] = useState('');
-  const [msg, setMsg] = useState('');
-  const [error, setError] = useState('');
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin', 'organizers'],
     queryFn: () => get<{ organizers: Organizer[] }>('/admin/organizers'),
@@ -17,9 +16,8 @@ export default function OrganizersPage() {
   const organizers = data?.organizers ?? [];
 
   async function act(fn: () => Promise<unknown>, ok: string) {
-    setMsg(''); setError('');
-    try { await fn(); setMsg(ok); qc.invalidateQueries({ queryKey: ['admin', 'organizers'] }); }
-    catch (e) { setError(e instanceof ApiError ? e.message : 'Action failed'); }
+    try { await fn(); toast(ok); qc.invalidateQueries({ queryKey: ['admin', 'organizers'] }); }
+    catch (e) { toast(e instanceof ApiError ? e.message : 'Action failed', 'err'); }
   }
 
   return (
@@ -40,9 +38,6 @@ export default function OrganizersPage() {
           <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputDark} placeholder="teammate@crew.dev" /></label>
         <button className="btn-sunny btn-sm">Grant organizer</button>
       </form>
-      {msg && <p role="status" className="text-sm font-extrabold text-mint-400">{msg}</p>}
-      {error && <p role="alert" className="text-sm font-extrabold text-bubble-400">{error}</p>}
-
       {isLoading && <div className={`${panel} h-32 animate-pulse`} />}
       {isError && <p role="alert" className="text-sm font-extrabold text-bubble-400">Could not load organizers.</p>}
       <ul className="space-y-2">
@@ -53,8 +48,11 @@ export default function OrganizersPage() {
               <p className="truncate font-mono text-xs text-cream/45">{o.email}</p>
             </div>
             <span className="badge-sunny">Organizer</span>
-            <button onClick={() => { if (window.confirm(`Revoke organizer access for ${o.email}?`)) act(() => post('/admin/organizers', { email: o.email, isOrganizer: false }), `${o.email} revoked`); }}
-              className="rounded-lg border border-bubble-400/50 px-3 py-1.5 text-xs font-extrabold text-bubble-400 hover:bg-bubble-400/10">
+            <button onClick={async () => {
+              if (await confirmDialog({ title: `Revoke organizer access for ${o.email}?`, body: 'They will lose access to this console immediately.', danger: true })) {
+                act(() => post('/admin/organizers', { email: o.email, isOrganizer: false }), `${o.email} revoked`);
+              }
+            }} className="rounded-lg border border-bubble-400/50 px-3 py-1.5 text-xs font-extrabold text-bubble-400 hover:bg-bubble-400/10">
               Revoke
             </button>
           </li>

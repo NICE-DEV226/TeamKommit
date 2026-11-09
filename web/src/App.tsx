@@ -12,6 +12,7 @@ import SubmissionsPage from './pages/SubmissionsPage';
 import AdminLayout from './admin/AdminLayout';
 import AdminOverviewPage from './admin/OverviewPage';
 import AdminHackathonsPage from './admin/HackathonsPage';
+import AdminHackathonDetailPage from './admin/HackathonDetailPage';
 import AdminPipelinesPage from './admin/PipelinesPage';
 import AdminOrganizersPage from './admin/OrganizersPage';
 import AuthPage from './pages/AuthPage';
@@ -113,6 +114,7 @@ export default function App() {
         <Route path="/admin" element={<RequireAuth><AdminLayout /></RequireAuth>}>
           <Route index element={<AdminOverviewPage />} />
           <Route path="hackathons" element={<AdminHackathonsPage />} />
+          <Route path="hackathons/:id" element={<AdminHackathonDetailPage />} />
           <Route path="pipelines" element={<AdminPipelinesPage />} />
           <Route path="organizers" element={<AdminOrganizersPage />} />
         </Route>
