@@ -7,30 +7,20 @@ import { CommitMark } from '../components/doodles';
 import { Overlays } from './overlays';
 
 const NAV = [
-  { to: '/admin', label: 'Overview', end: true, accent: 'sunny' },
-  { to: '/admin/hackathons', label: 'Hackathons', accent: 'sky' },
-  { to: '/admin/pipelines', label: 'Pipelines', accent: 'grape' },
-  { to: '/admin/organizers', label: 'Organizers', accent: 'mint' },
-] as const;
-
-const ACCENT_DOT: Record<string, string> = {
-  sunny: 'bg-sunny-400', sky: 'bg-sky-400', grape: 'bg-grape-400', mint: 'bg-mint-400',
-};
-const ACCENT_TEXT: Record<string, string> = {
-  sunny: 'text-sunny-400', sky: 'text-sky-400', grape: 'text-grape-400', mint: 'text-mint-400',
-};
-const ACCENT_BORDER: Record<string, string> = {
-  sunny: 'border-sunny-400', sky: 'border-sky-400', grape: 'border-grape-400', mint: 'border-mint-400',
-};
+  { to: '/admin', label: 'Overview', end: true },
+  { to: '/admin/hackathons', label: 'Hackathons' },
+  { to: '/admin/pipelines', label: 'Pipelines' },
+  { to: '/admin/organizers', label: 'Organizers' },
+];
 
 function linkCls({ isActive }: { isActive: boolean }) {
   return `flex items-center gap-2.5 rounded-xl px-4 py-2.5 text-sm font-extrabold transition-colors ${
-    isActive ? 'bg-white/10 text-cream' : 'text-cream/60 hover:bg-white/5 hover:text-cream'
+    isActive ? 'bg-sunny-400 text-ink' : 'text-cream/60 hover:bg-white/5 hover:text-cream'
   }`;
 }
 
-function Dot({ accent, active }: { accent: string; active: boolean }) {
-  return <span className={`h-2 w-2 shrink-0 rounded-full ${active ? ACCENT_DOT[accent] : 'bg-cream/25'}`} />;
+function Dot({ active }: { active: boolean }) {
+  return <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? 'bg-ink' : 'bg-cream/25'}`} />;
 }
 
 export default function AdminLayout() {
@@ -76,8 +66,7 @@ export default function AdminLayout() {
             <nav aria-label="Admin sections" className="space-y-1">
               {NAV.map((n) => (
                 <NavLink key={n.to} to={n.to} end={n.end} className={linkCls}>
-                  {({ isActive }) => (<><Dot accent={n.accent} active={isActive} />
-                    <span className={isActive ? ACCENT_TEXT[n.accent] : ''}>{n.label}</span></>)}
+                  {({ isActive }) => (<><Dot active={isActive} />{n.label}</>)}
                 </NavLink>
               ))}
             </nav>
@@ -102,9 +91,9 @@ export default function AdminLayout() {
               {NAV.map((n) => (
                 <NavLink key={n.to} to={n.to} end={n.end}
                   className={({ isActive }) => `flex shrink-0 items-center gap-1.5 rounded-full border-2 px-4 py-1.5 text-xs font-extrabold ${
-                    isActive ? `${ACCENT_BORDER[n.accent]} bg-white/10 text-cream` : 'border-cream/25 text-cream/60'
+                    isActive ? 'border-sunny-400 bg-sunny-400 text-ink' : 'border-cream/25 text-cream/60'
                   }`}>
-                  <Dot accent={n.accent} active={false} />{n.label}
+                  {n.label}
                 </NavLink>
               ))}
             </nav>
