@@ -38,13 +38,13 @@ jobs:
           docker run -d --name mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
           for i in $(seq 1 40); do
             # initiate is idempotent-ish: it throws once the RS exists, which we swallow.
-            docker exec mongo mongosh --quiet --eval "try { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}) } catch(e) {}" >/dev/null 2>&1
+            docker exec mongo mongosh --quiet --eval "try { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}) } catch(e) {}" >/dev/null 2>&1 || true
             if docker exec mongo mongosh --quiet --eval "try { rs.status().ok } catch(e) { false }" 2>/dev/null | grep -q true; then
               echo "replica set ready"; break
             fi
             sleep 2
           done
-          docker exec mongo mongosh --quiet --eval "try { rs.status().ok } catch(e) { false }" | grep -q true
+          docker exec mongo mongosh --quiet --eval "try { rs.status().ok } catch(e) { false }" 2>/dev/null | grep -q true || { echo "replica set never became ready"; docker logs mongo --tail 30; exit 1; }
       - uses: actions/setup-node@v4
         with:
           node-version: 22
