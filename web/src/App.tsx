@@ -1,8 +1,8 @@
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLiveEvents } from './lib/events';
-import { isLoggedIn, get } from './lib/api';
+import { isLoggedIn } from './lib/api';
 import BoardPage from './pages/BoardPage';
 import LandingPage from './pages/LandingPage';
 import TeamPage from './pages/TeamPage';
@@ -29,15 +29,6 @@ function Shell({ children }: { children: React.ReactNode }) {
   useLiveEvents(() => {
     qc.invalidateQueries();
   }, {}, setLive, isLoggedIn());
-  // Role-aware nav: organizer-only surfaces stay hidden for regular users.
-  const { data: me } = useQuery({
-    queryKey: ['me'],
-    queryFn: () => get<{ user: { isOrganizer?: boolean } }>('/auth/me'),
-    enabled: isLoggedIn(),
-    staleTime: 60_000,
-    retry: false,
-  });
-  const isOrganizer = !!me?.user?.isOrganizer;
   // The organizer console is a separate app surface: no participant chrome.
   if (location.pathname.startsWith('/admin')) {
     return <div className="min-h-screen bg-ink">{children}</div>;
@@ -54,12 +45,6 @@ function Shell({ children }: { children: React.ReactNode }) {
           <NavLink to="/board" className={({ isActive }) => `nav-link shrink-0 ${isActive ? 'nav-link-active' : ''}`}>Board</NavLink>
           <NavLink to="/people" className={({ isActive }) => `nav-link shrink-0 ${isActive ? 'nav-link-active' : ''}`}>People</NavLink>
           <NavLink to="/submissions" className={({ isActive }) => `nav-link shrink-0 ${isActive ? 'nav-link-active' : ''}`}>Submissions</NavLink>
-          {isOrganizer && (
-            <NavLink to="/admin" className={({ isActive }) =>
-              `nav-link shrink-0 ${isActive ? 'nav-link-active' : ''} border-sunny-400! bg-sunny-400/30!`}>
-              Admin
-            </NavLink>
-          )}
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <span className={live ? 'badge-live hidden md:inline-flex' : 'badge-offline hidden md:inline-flex'}
               title={live ? 'Live updates connected' : 'Reconnecting…'}>
