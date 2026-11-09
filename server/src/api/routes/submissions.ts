@@ -65,6 +65,9 @@ submissionsRouter.post('/', requireAuth, validate(createSchema), asyncH(async (r
   const body = req.body as z.infer<typeof createSchema>;
   const team = await Team.findById(body.teamId).lean();
   if (!team || team.lifecycleStatus !== 'ACTIVE') throw nf('Team not found');
+  // The team must belong to the hackathon being submitted to — otherwise a
+  // member could file under another event's deadline/pipeline/stats.
+  if (team.hackathonId.toString() !== body.hackathonId) throw nf('Team not found');
   await requireTeamMember(team._id as Types.ObjectId, req.userId!);
 
   const hackathon = await Hackathon.findById(body.hackathonId).lean();

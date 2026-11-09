@@ -258,6 +258,16 @@ export async function leaveTeam(input: {
   });
 }
 
+/**
+ * Authoritative leadership check. `team.leaderId` is a denormalized pointer
+ * that can go stale — e.g. a leader who departs with no successor keeps the
+ * pointer while their membership becomes LEFT. The ACTIVE LEADER membership
+ * is the source of truth for authorization; leaderId is display-only.
+ */
+export async function isActiveTeamLeader(teamId: Types.ObjectId, userId: Types.ObjectId): Promise<boolean> {
+  return !!(await Membership.exists({ teamId, participantId: userId, role: 'LEADER', status: 'ACTIVE' }));
+}
+
 /** Leader (or self) creates a shareable invite code for the team. */
 export async function createInviteCode(input: {
   teamId: Types.ObjectId;
@@ -265,7 +275,8 @@ export async function createInviteCode(input: {
   actorId: Types.ObjectId;
 }) {
   const team = await Team.findById(input.teamId).lean();
-  if (!team || team.leaderId.toString() !== input.actorId.toString()) {
+  if (!team) throw new DomainRejection('TEAM_NOT_FOUND', 'Team not found', 404);
+  if (!(await isActiveTeamLeader(input.teamId, input.actorId))) {
     throw new DomainRejection('NOT_LEADER', 'Only the team leader can create invite codes', 403);
   }
   const { raw, hash } = generateInviteCode();

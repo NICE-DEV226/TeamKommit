@@ -11,6 +11,7 @@ import { JoinRequest } from '../../models/JoinRequest.js';
 import { validate } from '../middleware/common.js';
 import { requireAuth } from '../middleware/auth.js';
 import { admit } from '../../domain/admission.js';
+import { isActiveTeamLeader } from '../../domain/teams.js';
 import { config } from '../../config.js';
 import { DomainRejection, forbidden, notFound as nf } from '../../lib/errors.js';
 
@@ -54,7 +55,7 @@ const inviteSchema = z.object({ inviteeId: oid });
 membershipRouter.post('/teams/:id/invitations', requireAuth, codeLimiter, validate(z.object({ id: oid }), 'params'), validate(inviteSchema), asyncH(async (req, res) => {
   const team = await Team.findById(req.params.id).lean();
   if (!team || team.lifecycleStatus !== 'ACTIVE') throw nf('Team not found');
-  if (team.leaderId.toString() !== req.userId!.toString()) throw forbidden('Only the leader can invite');
+  if (!(await isActiveTeamLeader(team._id as Types.ObjectId, req.userId!))) throw forbidden('Only the leader can invite');
   const { inviteeId } = req.body as z.infer<typeof inviteSchema>;
   const invitee = await User.findById(inviteeId).select('_id').lean();
   if (!invitee) throw nf('User not found');
@@ -81,6 +82,9 @@ membershipRouter.get('/invitations', requireAuth, asyncH(async (req, res) => {
 membershipRouter.post('/invitations/:id/accept', requireAuth, codeLimiter, validate(z.object({ id: oid }), 'params'), asyncH(async (req, res) => {
   const inv = await Invitation.findById(req.params.id).lean();
   if (!inv || inv.status !== 'PENDING' || inv.expiresAt <= new Date()) throw nf('Invitation not found or expired');
+  // Only DIRECT invitations may be accepted here. CODE invitations must go
+  // through /teams/join-code so the secret code is actually verified.
+  if (inv.kind !== 'DIRECT') throw nf('Invitation not found or expired');
   if (inv.inviteeId && inv.inviteeId.toString() !== req.userId!.toString()) throw forbidden('This invitation is addressed to someone else');
   const idemKey = req.headers['idempotency-key'] as string | undefined;
   const result = await admit({
@@ -179,7 +183,7 @@ membershipRouter.post('/teams/:id/join-request/cancel', requireAuth, validate(z.
 membershipRouter.get('/teams/:id/requests', requireAuth, validate(z.object({ id: oid }), 'params'), asyncH(async (req, res) => {
   const team = await Team.findById(req.params.id).lean();
   if (!team) throw nf('Team not found');
-  if (team.leaderId.toString() !== req.userId!.toString()) throw forbidden('Only the leader can view requests');
+  if (!(await isActiveTeamLeader(team._id as Types.ObjectId, req.userId!))) throw forbidden('Only the leader can view requests');
   const requests = await JoinRequest.find({ teamId: team._id, status: 'PENDING' }).sort({ createdAt: 1 }).limit(100).lean();
   const users = await User.find({ _id: { $in: requests.map((r) => r.participantId) } })
     .select('displayName bio timezone skills').lean();
@@ -192,7 +196,7 @@ async function decideRequest(req: Request, res: Response, decision: 'ACCEPTED' |
   if (!jr || jr.status !== 'PENDING') throw nf('Request not found or already decided');
   const team = await Team.findById(jr.teamId).lean();
   if (!team) throw nf('Team not found');
-  if (team.leaderId.toString() !== req.userId!.toString()) throw forbidden('Only the leader can decide requests');
+  if (!(await isActiveTeamLeader(team._id as Types.ObjectId, req.userId!))) throw forbidden('Only the leader can decide requests');
 
   if (decision === 'DECLINED') {
     jr.status = 'DECLINED';

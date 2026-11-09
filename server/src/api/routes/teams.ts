@@ -9,7 +9,7 @@ import { User } from '../../models/User.js';
 import { AuditEvent } from '../../models/AuditEvent.js';
 import { validate } from '../middleware/common.js';
 import { requireAuth } from '../middleware/auth.js';
-import { createTeam, leaveTeam, createInviteCode } from '../../domain/teams.js';
+import { createTeam, leaveTeam, createInviteCode, isActiveTeamLeader } from '../../domain/teams.js';
 import { canonicalSkills } from '../../domain/taxonomy.js';
 import { suggestTeammates } from '../../domain/matching.js';
 import { DomainRejection, forbidden, notFound as nf } from '../../lib/errors.js';
@@ -182,7 +182,7 @@ const patchTeamSchema = z.object({
 teamsRouter.patch('/teams/:id', requireAuth, validate(z.object({ id: oid }), 'params'), validate(patchTeamSchema), asyncH(async (req, res) => {
   const team = await Team.findById(req.params.id);
   if (!team || team.lifecycleStatus !== 'ACTIVE') throw nf('Team not found');
-  if (team.leaderId.toString() !== req.userId!.toString()) throw forbidden('Only the leader can update the team');
+  if (!(await isActiveTeamLeader(team._id as Types.ObjectId, req.userId!))) throw forbidden('Only the team leader can update the team');
   const body = req.body as z.infer<typeof patchTeamSchema>;
   if (body.skillsSought) body.skillsSought = canonicalSkills(body.skillsSought);
   if (body.maxSize !== undefined) {
@@ -239,7 +239,7 @@ const removeSchema = z.object({ membershipId: oid });
 teamsRouter.post('/teams/:id/remove', requireAuth, validate(z.object({ id: oid }), 'params'), validate(removeSchema), asyncH(async (req, res) => {
   const team = await Team.findById(req.params.id);
   if (!team || team.lifecycleStatus !== 'ACTIVE') throw nf('Team not found');
-  if (team.leaderId.toString() !== req.userId!.toString()) throw forbidden('Only the leader can remove members');
+  if (!(await isActiveTeamLeader(team._id as Types.ObjectId, req.userId!))) throw forbidden('Only the team leader can remove members');
   const { membershipId } = req.body as z.infer<typeof removeSchema>;
 
   await withTransaction(async (session) => {
@@ -282,8 +282,9 @@ teamsRouter.get('/teams/:id/audit', requireAuth, validate(z.object({ id: oid }),
   const team = await Team.findById(req.params.id).lean();
   if (!team) throw nf('Team not found');
   const isMember = await Membership.exists({ teamId: team._id, participantId: req.userId, status: 'ACTIVE' });
-  const isLeader = team.leaderId.toString() === req.userId!.toString();
-  if (!isMember && !isLeader && !req.isOrganizer) throw forbidden();
+  // Leaders are always ACTIVE members, so isMember covers them; team.leaderId
+  // is denormalized and can be stale (departed leader) — never authorize on it.
+  if (!isMember && !req.isOrganizer) throw forbidden();
   const events = await AuditEvent.find({ teamId: team._id }).sort({ occurredAt: -1 }).limit(100).lean();
   res.json({ events });
 }));
