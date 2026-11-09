@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post, isLoggedIn, ApiError } from '../lib/api';
 import { Star4, Sparkle } from '../components/doodles';
 import { ErrorCard, usePageTitle } from '../components/feedback';
+import ProfileNudge from '../components/ProfileNudge';
 
 interface Member {
   membershipId: string; role: string; openToLead: boolean; joinedAt: string;
@@ -145,6 +146,7 @@ export default function TeamPage() {
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
         <Link to="/board" className="inline-flex items-center gap-1.5 text-sm font-extrabold text-grape-500 hover:underline">← Back to board</Link>
+        <ProfileNudge />
         <section className="sticker relative overflow-hidden p-6 sm:p-8">
           <Sparkle className="absolute right-6 top-6 h-5 w-5 text-sunny-500 floaty" />
           <Star4 className="absolute bottom-6 right-14 h-6 w-6 text-grape-500/60 rotate-12" />

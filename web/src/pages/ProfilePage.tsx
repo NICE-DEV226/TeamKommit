@@ -50,6 +50,7 @@ interface Me {
     skills: { skill: string; level: number; canLead?: boolean }[];
     preferredRoles: string[]; availability?: AvailWindow[];
     lookingForTeam: boolean; discoverable: boolean; isOrganizer?: boolean;
+    profileCompleteness?: number;
   };
 }
 
@@ -140,6 +141,14 @@ export default function ProfilePage() {
           <Star4 className="h-6 w-6 text-mint-500" />
         </h1>
         <p className="mt-1.5 text-sm font-semibold text-ink/60">Skills and availability power teammate suggestions.</p>
+        {typeof u.profileCompleteness === 'number' && (
+          <div className="mt-3 flex items-center gap-3">
+            <div className="h-2.5 flex-1 max-w-xs overflow-hidden rounded-full border border-ink/20 bg-ink/5" role="progressbar" aria-valuenow={u.profileCompleteness} aria-valuemin={0} aria-valuemax={100} aria-label="Profile completeness">
+              <div className={`h-full rounded-full ${u.profileCompleteness >= 60 ? 'bg-mint-500' : u.profileCompleteness >= 30 ? 'bg-sunny-500' : 'bg-tang-500'}`} style={{ width: `${u.profileCompleteness}%` }} />
+            </div>
+            <span className="font-mono text-xs font-extrabold text-ink/60">{u.profileCompleteness}% complete</span>
+          </div>
+        )}
       </div>
       <form onSubmit={save} className="sticker space-y-6 p-6 sm:p-8">
         <div className="grid gap-5 sm:grid-cols-2">

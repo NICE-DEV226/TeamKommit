@@ -115,10 +115,25 @@ authRouter.patch('/me', requireAuth, validate(profileSchema), async (req, res, n
   } catch (err) { next(err); }
 });
 
+function profileCompleteness(u: Record<string, unknown>): number {
+  // Weighted rubric — every field that feeds matching/explainability.
+  let score = 0;
+  const skills = Array.isArray(u.skills) ? u.skills.length : 0;
+  if (skills > 0) score += 30;
+  if (skills >= 3) score += 10;
+  const avail = Array.isArray(u.availability) ? u.availability.length : 0;
+  if (avail > 0) score += 25;
+  if (typeof u.bio === 'string' && u.bio.trim().length >= 20) score += 15;
+  if (u.timezone && u.timezone !== 'UTC') score += 10;
+  if (u.lookingForTeam === true) score += 10;
+  if (Array.isArray(u.preferredRoles) && u.preferredRoles.length > 0) score += 10;
+  return Math.min(100, score);
+}
+
 function publicUser(u: object) {
   const doc = typeof (u as { toObject?: () => object }).toObject === 'function'
     ? (u as { toObject: () => object }).toObject()
     : u;
   const { passwordHash, refreshTokenHash, ...rest } = doc as Record<string, unknown> & { passwordHash?: string; refreshTokenHash?: string };
-  return rest;
+  return { ...rest, profileCompleteness: profileCompleteness(rest) };
 }

@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { get, post, isLoggedIn, ApiError } from '../lib/api';
 import { Star4, Gamepad } from '../components/doodles';
 import { ErrorCard, usePageTitle } from '../components/feedback';
+import ProfileNudge from '../components/ProfileNudge';
 
 interface Team {
   _id: string; name: string; description: string; memberCount: number; maxSize: number;
@@ -67,6 +68,8 @@ export default function BoardPage() {
     <div>
       <div id="board">
         {loggedIn ? (
+          <>
+          <ProfileNudge />
           <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h1 className="flex items-center gap-3 text-3xl font-extrabold tracking-tight">
@@ -82,6 +85,7 @@ export default function BoardPage() {
               {showCreate ? 'Close' : '+ Create team'}
             </button>
           </div>
+          </>
         ) : (
           <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
             <h1 className="flex items-center gap-3 text-2xl font-extrabold tracking-tight">
