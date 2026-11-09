@@ -58,6 +58,8 @@ services:
       dockerfile: web/Dockerfile
     depends_on:
       - server
+    environment:
+      API_UPSTREAM: http://server:4000
     ports:
       - "5173:80"
 

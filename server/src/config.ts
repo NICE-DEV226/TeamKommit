@@ -14,6 +14,7 @@ export const config = {
   jwtAccessTtlSec: 15 * 60,
   jwtRefreshTtlSec: 30 * 24 * 3600,
   corsOrigin: (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(','),
+  inlineWorker: process.env.INLINE_WORKER === 'true',
   s3: {
     endpoint: process.env.S3_ENDPOINT ?? 'http://127.0.0.1:9090',
     // Host embedded in presigned URLs — MUST be reachable by the browser.

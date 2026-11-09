@@ -3,6 +3,9 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
+import { existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import { authRouter } from './routes/auth.js';
 import { teamsRouter } from './routes/teams.js';
@@ -41,6 +44,14 @@ export function createApp() {
   app.use('/api/submissions', submissionsRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/events', eventsRouter);
+
+  // Serve the built SPA when web/dist is present (single-service deploys).
+  // API 404s are untouched — the fallback only catches non-/api GETs.
+  const webDist = join(dirname(fileURLToPath(import.meta.url)), '../../../web/dist');
+  if (existsSync(join(webDist, 'index.html'))) {
+    app.use(express.static(webDist, { index: false, maxAge: '1h' }));
+    app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(join(webDist, 'index.html')));
+  }
 
   app.use(notFoundHandler);
   app.use(errorHandler);
