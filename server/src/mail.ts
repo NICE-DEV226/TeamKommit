@@ -12,11 +12,17 @@ import { config } from './config.js';
 let transporter: Transporter | null = null;
 function getTransporter(): Transporter | null {
   if (!config.mail.apiKey || !config.mail.smtpUser) return null;
+  if (transporter === null) {
+    console.log(`[mail] SMTP transporter configured (user=${config.mail.smtpUser})`);
+  }
   transporter ??= nodemailer.createTransport({
     host: 'smtp-relay.brevo.com',
     port: 587,
     secure: false,
     auth: { user: config.mail.smtpUser, pass: config.mail.apiKey },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
   });
   return transporter;
 }
@@ -35,12 +41,13 @@ export async function sendMail(input: SendInput): Promise<void> {
   const t = getTransporter();
   if (!t) return;
   try {
-    await t.sendMail({
+    const info = await t.sendMail({
       from: `"${config.mail.fromName}" <${config.mail.from}>`,
       to: input.to.name ? `"${input.to.name}" <${input.to.email}>` : input.to.email,
       subject: input.subject,
       html: input.html,
     });
+    console.log(`[mail] sent "${input.subject}" → ${input.to.email} (${info.messageId ?? 'ok'})`);
   } catch (err) {
     console.error('[mail] send failed:', err);
   }
