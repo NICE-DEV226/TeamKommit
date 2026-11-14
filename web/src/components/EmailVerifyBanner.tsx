@@ -23,11 +23,11 @@ export default function EmailVerifyBanner() {
   }
 
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl border-2 border-sky-400/60 bg-sky-400/10 px-5 py-4">
-      <Gamepad className="h-10 w-10 shrink-0 -rotate-6 text-sky-400" />
+    <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl border-2 border-sky-500/40 bg-sky-400/15 px-5 py-4">
+      <Gamepad className="h-10 w-10 shrink-0 -rotate-6 text-sky-500" />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-extrabold text-cream">Confirm your email address</p>
-        <p className="mt-0.5 text-xs font-semibold text-cream/60">
+        <p className="text-sm font-extrabold text-ink">Confirm your email address</p>
+        <p className="mt-0.5 text-xs font-semibold text-ink/60">
           {state === 'sent'
             ? 'Verification email sent — check your inbox (and spam).'
             : state === 'error'
@@ -37,7 +37,7 @@ export default function EmailVerifyBanner() {
       </div>
       {state !== 'sent' && (
         <button onClick={resend} disabled={state === 'sending'}
-          className="btn-sm shrink-0 rounded-xl border-2 border-ink bg-sky-400 px-4 py-2 text-xs font-extrabold text-ink hover:bg-sky-500 disabled:opacity-50">
+          className="btn-sm shrink-0 rounded-xl border-2 border-ink bg-sky-400 px-4 py-2 text-xs font-extrabold text-white hover:bg-sky-500 disabled:opacity-50">
           {state === 'sending' ? 'Sending…' : 'Resend email'}
         </button>
       )}
