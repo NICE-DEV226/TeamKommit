@@ -16,6 +16,9 @@ import AdminHackathonDetailPage from './admin/HackathonDetailPage';
 import AdminPipelinesPage from './admin/PipelinesPage';
 import AdminOrganizersPage from './admin/OrganizersPage';
 import AuthPage from './pages/AuthPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import EmailVerifyBanner from './components/EmailVerifyBanner';
 import NotFoundPage from './pages/NotFoundPage';
 import { Sparkle, Squiggle, CommitMark } from './components/doodles';
 
@@ -60,7 +63,10 @@ function Shell({ children }: { children: React.ReactNode }) {
         </nav>
       </header>
       <main id="main" className="flex-1 w-full max-w-6xl mx-auto scroll-mt-24 px-4 py-8 sm:py-10">
-        <div key={location.pathname} className="page-enter">{children}</div>
+        <div key={location.pathname} className="page-enter">
+          {isLoggedIn() && !location.pathname.startsWith('/admin') && <EmailVerifyBanner />}
+          {children}
+        </div>
       </main>
       <footer className="border-t-2 border-ink bg-ink text-cream">
         <div className="max-w-6xl mx-auto px-4 py-8">
@@ -92,6 +98,8 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/board" element={<BoardPage />} />
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/teams/:id" element={<TeamPage />} />
         <Route path="/people" element={<PeoplePage />} />
         <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />

@@ -33,12 +33,20 @@ const userSchema = new Schema(
     // Discovery privacy: participants only appear in the people board if opted in.
     discoverable: { type: Boolean, default: true },
     isOrganizer: { type: Boolean, default: false },
+    emailVerified: { type: Boolean, default: false },
+    // Hashed single-use tokens (sha256) — raw token only ever lives in the email link.
+    verifyTokenHash: { type: String },
+    verifyTokenExpires: { type: Date },
+    resetTokenHash: { type: String },
+    resetTokenExpires: { type: Date },
     refreshTokenHash: { type: String },
   },
   { timestamps: true },
 );
 
 userSchema.index({ lookingForTeam: 1, discoverable: 1 });
+userSchema.index({ verifyTokenHash: 1 }, { sparse: true });
+userSchema.index({ resetTokenHash: 1 }, { sparse: true });
 
 export type UserDoc = HydratedDocument<InferSchemaType<typeof userSchema>>;
 export const User = model('User', userSchema);

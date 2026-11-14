@@ -14,6 +14,14 @@ export const config = {
   jwtAccessTtlSec: 15 * 60,
   jwtRefreshTtlSec: 30 * 24 * 3600,
   corsOrigin: (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(','),
+  mail: {
+    apiKey: process.env.BREVO_API_KEY ?? '',
+    from: process.env.MAIL_FROM ?? 'noreply@teamkommit.dev',
+    fromName: process.env.MAIL_FROM_NAME ?? 'TeamKommit',
+    appUrl: process.env.APP_URL ?? 'http://localhost:5173',
+    verifyTtlHours: 24,
+    resetTtlMin: 30,
+  },
   inlineWorker: process.env.INLINE_WORKER === 'true',
   s3: {
     endpoint: process.env.S3_ENDPOINT ?? 'http://127.0.0.1:9090',

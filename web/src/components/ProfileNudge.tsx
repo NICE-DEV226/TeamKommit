@@ -8,7 +8,7 @@ const THRESHOLD = 60;
 export function useProfileCompleteness() {
   return useQuery({
     queryKey: ['me'],
-    queryFn: () => get<{ user: { profileCompleteness?: number } }>('/auth/me'),
+    queryFn: () => get<{ user: { profileCompleteness?: number; emailVerified?: boolean } }>('/auth/me'),
     enabled: isLoggedIn(),
     staleTime: 60_000,
     retry: false,

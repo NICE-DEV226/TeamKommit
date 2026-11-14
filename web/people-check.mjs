@@ -1,0 +1,16 @@
+import { chromium } from '@playwright/test';
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
+const errs = [];
+p.on('pageerror', e => errs.push(e.message));
+p.on('console', m => { if (m.type()==='error') errs.push(m.text().slice(0,120)); });
+await p.goto('http://localhost:5173/auth');
+await p.fill('input[type="email"]', 'user0@seed.teamkommit.dev');
+await p.fill('input[type="password"]', 'password123');
+await p.click('.sticker form .btn-grape');
+await p.waitForTimeout(1500);
+await p.goto('http://localhost:5173/people', { waitUntil: 'networkidle' });
+await p.waitForTimeout(1200);
+console.log('people cards:', await p.locator('article').count());
+console.log('errors:', errs.length ? errs.slice(0,5) : 'none');
+await b.close();

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { Types } from 'mongoose';
 import { User } from '../../models/User.js';
@@ -9,6 +10,7 @@ import { badRequest, unauthorized } from '../../lib/errors.js';
 import { canonicalSkill, canonicalSkills } from '../../domain/taxonomy.js';
 import jwt from 'jsonwebtoken';
 import { config } from '../../config.js';
+import { sendMailAsync, welcomeEmail, verificationEmail, passwordResetEmail } from '../../mail.js';
 import rateLimit from 'express-rate-limit';
 
 export const authRouter = Router();
@@ -39,14 +41,101 @@ function tokensFor(userId: Types.ObjectId) {
   };
 }
 
+function newEmailToken(): { raw: string; hash: string } {
+  const raw = randomBytes(32).toString('base64url');
+  return { raw, hash: createHash('sha256').update(raw).digest('hex') };
+}
+
+const verifyUrl = (raw: string) => `${config.mail.appUrl}/verify-email?token=${raw}`;
+const resetUrl = (raw: string) => `${config.mail.appUrl}/reset-password?token=${raw}`;
+
 authRouter.post('/register', credentialsLimiter, validate(registerSchema), async (req, res, next) => {
   try {
     const { email, password, displayName } = req.body as z.infer<typeof registerSchema>;
     const exists = await User.findOne({ email: email.toLowerCase() }).lean();
     if (exists) throw badRequest('An account with this email already exists');
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await User.create({ email: email.toLowerCase(), passwordHash, displayName });
+    const { raw, hash } = newEmailToken();
+    const user = await User.create({
+      email: email.toLowerCase(), passwordHash, displayName,
+      verifyTokenHash: hash,
+      verifyTokenExpires: new Date(Date.now() + config.mail.verifyTtlHours * 3600_000),
+    });
+    sendMailAsync(welcomeEmail({ email: user.email, name: displayName }, displayName, verifyUrl(raw)));
     res.status(201).json({ user: publicUser(user), ...tokensFor(user._id as Types.ObjectId) });
+  } catch (err) { next(err); }
+});
+
+authRouter.post('/verify-email', credentialsLimiter, async (req, res, next) => {
+  try {
+    const { token } = req.body as { token?: string };
+    if (!token || typeof token !== 'string') throw badRequest('Missing token');
+    const hash = createHash('sha256').update(token).digest('hex');
+    const user = await User.findOne({
+      verifyTokenHash: hash,
+      verifyTokenExpires: { $gt: new Date() },
+    });
+    if (!user) throw badRequest('This verification link is invalid or has expired');
+    user.emailVerified = true;
+    user.verifyTokenHash = undefined;
+    user.verifyTokenExpires = undefined;
+    await user.save();
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+authRouter.post('/resend-verification', requireAuth, credentialsLimiter, async (req, res, next) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) throw unauthorized();
+    if (user.emailVerified) throw badRequest('Email already verified');
+    const { raw, hash } = newEmailToken();
+    user.verifyTokenHash = hash;
+    user.verifyTokenExpires = new Date(Date.now() + config.mail.verifyTtlHours * 3600_000);
+    await user.save();
+    sendMailAsync(verificationEmail({ email: user.email, name: user.displayName }, verifyUrl(raw)));
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// Always 200 — never reveal whether the email exists.
+authRouter.post('/forgot-password', credentialsLimiter, async (req, res, next) => {
+  try {
+    const { email } = req.body as { email?: string };
+    if (email && typeof email === 'string') {
+      const user = await User.findOne({ email: email.toLowerCase().trim() });
+      if (user) {
+        const { raw, hash } = newEmailToken();
+        user.resetTokenHash = hash;
+        user.resetTokenExpires = new Date(Date.now() + config.mail.resetTtlMin * 60_000);
+        await user.save();
+        sendMailAsync(passwordResetEmail({ email: user.email, name: user.displayName }, resetUrl(raw)));
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+authRouter.post('/reset-password', credentialsLimiter, async (req, res, next) => {
+  try {
+    const { token, password } = req.body as { token?: string; password?: string };
+    if (!token || typeof token !== 'string') throw badRequest('Missing token');
+    if (!password || typeof password !== 'string' || password.length < 8 || password.length > 128) {
+      throw badRequest('Password must be 8-128 characters');
+    }
+    const hash = createHash('sha256').update(token).digest('hex');
+    const user = await User.findOne({
+      resetTokenHash: hash,
+      resetTokenExpires: { $gt: new Date() },
+    });
+    if (!user) throw badRequest('This reset link is invalid or has expired');
+    user.passwordHash = await bcrypt.hash(password, 12);
+    user.resetTokenHash = undefined;
+    user.resetTokenExpires = undefined;
+    user.emailVerified = true; // proves mailbox ownership
+    user.refreshTokenHash = undefined; // revoke all sessions
+    await user.save();
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
@@ -134,6 +223,7 @@ function publicUser(u: object) {
   const doc = typeof (u as { toObject?: () => object }).toObject === 'function'
     ? (u as { toObject: () => object }).toObject()
     : u;
-  const { passwordHash, refreshTokenHash, ...rest } = doc as Record<string, unknown> & { passwordHash?: string; refreshTokenHash?: string };
+  const { passwordHash, refreshTokenHash, verifyTokenHash, verifyTokenExpires, resetTokenHash, resetTokenExpires, ...rest } =
+    doc as Record<string, unknown> & { passwordHash?: string; refreshTokenHash?: string };
   return { ...rest, profileCompleteness: profileCompleteness(rest) };
 }

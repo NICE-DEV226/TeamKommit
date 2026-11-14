@@ -22,15 +22,16 @@ function PasswordInput({ value, onChange, autoComplete, minLength }: {
 }
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
-  usePageTitle(mode === 'login' ? 'Sign in' : 'Create account');
+  usePageTitle(mode === 'login' ? 'Sign in' : mode === 'register' ? 'Create account' : 'Reset password');
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,8 +39,13 @@ export default function AuthPage() {
       setError('Passwords do not match');
       return;
     }
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setNotice('');
     try {
+      if (mode === 'forgot') {
+        await post('/auth/forgot-password', { email });
+        setNotice('If that email has an account, a reset link is on its way.');
+        return;
+      }
       const res = await post<{ accessToken: string; refreshToken: string }>(`/auth/${mode}`, {
         email, password, ...(mode === 'register' ? { displayName: name } : {}),
       });
@@ -59,10 +65,12 @@ export default function AuthPage() {
           <CommitMark className="h-full w-full" />
         </span>
         <h1 className="text-4xl font-extrabold tracking-tight">
-          {mode === 'login' ? 'Welcome back' : 'Join the crew'}
+          {mode === 'login' ? 'Welcome back' : mode === 'register' ? 'Join the crew' : 'Reset password'}
         </h1>
         <p className="mt-2 text-sm font-semibold text-ink/60">
-          {mode === 'login' ? 'Sign in to your crew.' : 'Find your team before the deadline does.'}
+          {mode === 'login' ? 'Sign in to your crew.'
+            : mode === 'register' ? 'Find your team before the deadline does.'
+            : 'We\u2019ll email you a reset link.'}
         </p>
       </div>
 
@@ -72,7 +80,7 @@ export default function AuthPage() {
         <div className="mb-6 grid grid-cols-2 rounded-full border-2 border-ink bg-cream p-1">
           {(['login', 'register'] as const).map((m) => (
             <button key={m} type="button" aria-pressed={mode === m}
-              onClick={() => { setMode(m); setError(''); setConfirm(''); }}
+              onClick={() => { setMode(m); setError(''); setNotice(''); setConfirm(''); }}
               className={`rounded-full px-3 py-1.5 text-sm font-extrabold transition-all ${
                 mode === m ? 'bg-ink text-cream shadow-[2px_2px_0_var(--color-ink)]' : 'text-ink/50 hover:text-ink'
               }`}>
@@ -92,11 +100,13 @@ export default function AuthPage() {
             <span className="label">Email</span>
             <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="input" autoComplete="email" />
           </label>
-          <label className="block">
-            <span className="label">Password</span>
-            <PasswordInput value={password} onChange={setPassword}
-              autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={8} />
-          </label>
+          {mode !== 'forgot' && (
+            <label className="block">
+              <span className="label">Password</span>
+              <PasswordInput value={password} onChange={setPassword}
+                autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={8} />
+            </label>
+          )}
           {mode === 'register' && (
             <label className="block">
               <span className="label">Confirm password</span>
@@ -105,10 +115,25 @@ export default function AuthPage() {
             </label>
           )}
           {error && <p role="alert" className="text-sm font-extrabold text-bubble-500">{error}</p>}
+          {notice && <p role="status" className="text-sm font-extrabold text-mint-600">{notice}</p>}
           <button type="submit" disabled={busy} className="btn-grape w-full py-3">
-            {busy ? (mode === 'login' ? 'Signing in…' : 'Creating account…') : mode === 'login' ? 'Sign in' : 'Create account'}
+            {busy ? (mode === 'login' ? 'Signing in…' : mode === 'register' ? 'Creating account…' : 'Sending…')
+              : mode === 'login' ? 'Sign in' : mode === 'register' ? 'Create account' : 'Send reset link'}
           </button>
         </form>
+
+        {mode === 'login' && (
+          <button type="button" onClick={() => { setMode('forgot'); setError(''); setNotice(''); }}
+            className="mt-4 w-full text-center text-xs font-extrabold text-ink/50 hover:text-ink">
+            Forgot your password?
+          </button>
+        )}
+        {mode === 'forgot' && (
+          <button type="button" onClick={() => { setMode('login'); setError(''); setNotice(''); }}
+            className="mt-4 w-full text-center text-xs font-extrabold text-ink/50 hover:text-ink">
+            ← Back to sign in
+          </button>
+        )}
       </div>
 
       <p className="mt-5 text-center text-xs font-semibold text-ink/60">

@@ -14,6 +14,7 @@ import { admit } from '../../domain/admission.js';
 import { isActiveTeamLeader } from '../../domain/teams.js';
 import { config } from '../../config.js';
 import { DomainRejection, forbidden, notFound as nf } from '../../lib/errors.js';
+import { sendMailAsync, teamInviteEmail } from '../../mail.js';
 
 export const membershipRouter = Router();
 const oid = z.string().regex(/^[a-f\d]{24}$/i, 'Invalid id');
@@ -57,7 +58,10 @@ membershipRouter.post('/teams/:id/invitations', requireAuth, codeLimiter, valida
   if (!team || team.lifecycleStatus !== 'ACTIVE') throw nf('Team not found');
   if (!(await isActiveTeamLeader(team._id as Types.ObjectId, req.userId!))) throw forbidden('Only the leader can invite');
   const { inviteeId } = req.body as z.infer<typeof inviteSchema>;
-  const invitee = await User.findById(inviteeId).select('_id').lean();
+  const [invitee, inviter] = await Promise.all([
+    User.findById(inviteeId).select('email displayName').lean(),
+    User.findById(req.userId).select('displayName').lean(),
+  ]);
   if (!invitee) throw nf('User not found');
   if (await Membership.exists({ hackathonId: team.hackathonId, participantId: inviteeId, status: 'ACTIVE' })) {
     throw new DomainRejection('ALREADY_IN_TEAM', 'That user is already on a team', 409);
@@ -67,6 +71,11 @@ membershipRouter.post('/teams/:id/invitations', requireAuth, codeLimiter, valida
     hackathonId: team.hackathonId, teamId: team._id, inviterId: req.userId,
     inviteeId: new Types.ObjectId(inviteeId), kind: 'DIRECT', status: 'PENDING', expiresAt,
   });
+  sendMailAsync(teamInviteEmail(
+    { email: invitee.email, name: invitee.displayName },
+    inviter?.displayName ?? 'A teammate',
+    team.name,
+  ));
   res.status(201).json({ invitation: inv });
 }));
 

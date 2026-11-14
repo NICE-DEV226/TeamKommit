@@ -62,6 +62,7 @@ async function main() {
     userDocs.push({
       email: `user${i}@seed.teamkommit.dev`,
       passwordHash,
+      emailVerified: true,
       ...persona,
     });
   }

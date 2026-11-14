@@ -3,6 +3,10 @@ import { Submission } from '../models/Submission.js';
 import { OutboxEvent } from '../models/OutboxEvent.js';
 import { Hackathon } from '../models/Hackathon.js';
 import { Pipeline } from '../models/Pipeline.js';
+import { Team } from '../models/Team.js';
+import { Membership } from '../models/Membership.js';
+import { User } from '../models/User.js';
+import { sendMailAsync, submissionStatusEmail } from '../mail.js';
 import { runFileCheck, type PipelineStep } from './checks.js';
 
 interface CheckPayload {
@@ -87,6 +91,25 @@ export async function handleSubmissionCheck(payload: CheckPayload): Promise<unkn
       errors,
     },
   });
+
+  // Notify every active team member — best-effort, mail failure is logged only.
+  try {
+    const [team, members] = await Promise.all([
+      Team.findById(submission.teamId).select('name').lean(),
+      Membership.find({ teamId: submission.teamId, status: 'ACTIVE' }).select('participantId').lean(),
+    ]);
+    const users = await User.find({ _id: { $in: members.map((m) => m.participantId) } })
+      .select('email displayName').lean();
+    const detail = errors.length ? errors[0] : undefined;
+    for (const u of users) {
+      sendMailAsync(submissionStatusEmail(
+        { email: u.email, name: u.displayName },
+        team?.name ?? 'your team', version, status, detail,
+      ));
+    }
+  } catch (err) {
+    console.error('[mail] submission notification failed:', err);
+  }
 
   return { status, fileType: file.fileType, errors };
 }
