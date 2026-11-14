@@ -15,9 +15,9 @@ export const config = {
   jwtRefreshTtlSec: 30 * 24 * 3600,
   corsOrigin: (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(','),
   mail: {
-    // SMTP key from Brevo → SMTP & API → SMTP tab (xkeysib-…).
-    // Falls back to BREVO_API_KEY for setups that reuse one key.
-    apiKey: process.env.BREVO_SMTP_KEY ?? process.env.BREVO_API_KEY ?? '',
+    // REST API key (Brevo → API Keys) and SMTP key (Brevo → SMTP tab) are distinct.
+    apiKey: process.env.BREVO_API_KEY ?? '',
+    smtpKey: process.env.BREVO_SMTP_KEY ?? '',
     // Brevo SMTP login (shown in SMTP & API → SMTP tab), e.g. xxx@smtp-brevo.com
     smtpUser: process.env.BREVO_SMTP_USER ?? '',
     from: process.env.MAIL_FROM ?? 'noreply@teamkommit.dev',

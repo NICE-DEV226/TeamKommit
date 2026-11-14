@@ -11,7 +11,7 @@ import { config } from './config.js';
 
 let transporter: Transporter | null = null;
 function getTransporter(): Transporter | null {
-  if (!config.mail.apiKey || !config.mail.smtpUser) return null;
+  if (!config.mail.smtpKey || !config.mail.smtpUser) return null;
   if (transporter === null) {
     console.log(`[mail] SMTP transporter configured (user=${config.mail.smtpUser})`);
   }
@@ -19,7 +19,7 @@ function getTransporter(): Transporter | null {
     host: 'smtp-relay.brevo.com',
     port: 587,
     secure: false,
-    auth: { user: config.mail.smtpUser, pass: config.mail.apiKey },
+    auth: { user: config.mail.smtpUser, pass: config.mail.smtpKey },
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,
     socketTimeout: 20_000,
@@ -34,10 +34,48 @@ interface SendInput {
 }
 
 export function mailEnabled(): boolean {
-  return !!config.mail.apiKey && !!config.mail.smtpUser;
+  return !!(config.mail.apiKey || (config.mail.smtpKey && config.mail.smtpUser));
 }
 
 export async function sendMail(input: SendInput): Promise<void> {
+  // Railway (and most PaaS) block outbound SMTP ports — try the REST API
+  // first, fall back to SMTP relay for environments that allow it.
+  const viaApi = await sendViaApi(input);
+  if (viaApi) return;
+  await sendViaSmtp(input);
+}
+
+async function sendViaApi(input: SendInput): Promise<boolean> {
+  if (!config.mail.apiKey) return false;
+  try {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': config.mail.apiKey,
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender: { email: config.mail.from, name: config.mail.fromName },
+        to: [input.to],
+        subject: input.subject,
+        htmlContent: input.html,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (res.ok) {
+      console.log(`[mail] sent via API "${input.subject}" → ${input.to.email}`);
+      return true;
+    }
+    const body = await res.text().catch(() => '');
+    console.error(`[mail] API ${res.status}: ${body.slice(0, 200)}`);
+  } catch (err) {
+    console.error('[mail] API send failed:', err);
+  }
+  return false;
+}
+
+async function sendViaSmtp(input: SendInput): Promise<void> {
   const t = getTransporter();
   if (!t) return;
   try {
@@ -47,9 +85,9 @@ export async function sendMail(input: SendInput): Promise<void> {
       subject: input.subject,
       html: input.html,
     });
-    console.log(`[mail] sent "${input.subject}" → ${input.to.email} (${info.messageId ?? 'ok'})`);
+    console.log(`[mail] sent via SMTP "${input.subject}" → ${input.to.email} (${info.messageId ?? 'ok'})`);
   } catch (err) {
-    console.error('[mail] send failed:', err);
+    console.error('[mail] SMTP send failed:', err);
   }
 }
 
