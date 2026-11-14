@@ -15,7 +15,7 @@ let app: ReturnType<typeof createApp>;
 beforeAll(async () => { await setupTestDb(); app = createApp(); });
 afterAll(teardownTestDb);
 
-const auth = (userId: Types.ObjectId) => ({ Authorization: `Bearer ${signAccessToken(userId)}` });
+const auth = (userId: Types.ObjectId, isOrganizer = false) => ({ Authorization: `Bearer ${signAccessToken(userId, isOrganizer)}` });
 
 async function teamWithMember() {
   const hackathon = await makeHackathon({
@@ -82,7 +82,7 @@ describe('submissions API', () => {
       fileName: 'probe.zip', fileSize: 1234, fileKey: 'k',
       status: 'ACCEPTED', submittedBy: leader._id, confirmedAt: new Date(),
     });
-    const csv = await request(app).get('/api/submissions/admin/export.csv').set(auth(leader._id as Types.ObjectId));
+    const csv = await request(app).get('/api/submissions/admin/export.csv').set(auth(leader._id as Types.ObjectId, true));
     expect(csv.status).toBe(200);
     expect(csv.text).toContain('CSV-PROBE-TITLE');
     expect(csv.text).toContain(teamId.toString());
@@ -94,10 +94,10 @@ describe('submissions API', () => {
     const nonOrg = await makeUser();
     const denied = await request(app).get('/api/submissions/admin/stats').set(auth(nonOrg._id as Types.ObjectId));
     expect(denied.status).toBe(403);
-    const ok = await request(app).get('/api/submissions/admin/stats').set(auth(leader._id as Types.ObjectId));
+    const ok = await request(app).get('/api/submissions/admin/stats').set(auth(leader._id as Types.ObjectId, true));
     expect(ok.status).toBe(200);
     expect(ok.body).toHaveProperty('byStatus');
-    const csv = await request(app).get('/api/submissions/admin/export.csv').set(auth(leader._id as Types.ObjectId));
+    const csv = await request(app).get('/api/submissions/admin/export.csv').set(auth(leader._id as Types.ObjectId, true));
     expect(csv.status).toBe(200);
     expect(csv.headers['content-type']).toContain('text/csv');
     expect(csv.text).toContain('teamId,hackathonId');

@@ -18,7 +18,7 @@ let app: ReturnType<typeof createApp>;
 beforeAll(async () => { await setupTestDb(); app = createApp(); });
 afterAll(teardownTestDb);
 
-const auth = (userId: Types.ObjectId) => ({ Authorization: `Bearer ${signAccessToken(userId)}` });
+const auth = (userId: Types.ObjectId, isOrganizer = false) => ({ Authorization: `Bearer ${signAccessToken(userId, isOrganizer)}` });
 
 // SSE streams never end — supertest can't await them. Spin a real listener
 // and check response HEADERS via fetch, aborting the body immediately.
@@ -156,7 +156,7 @@ describe('role matrix — leader', () => {
 describe('role matrix — organizer', () => {
   it('admin endpoints: organizer yes, everyone else no', async () => {
     const { member, organizer } = await fixture();
-    const org = auth(organizer._id as Types.ObjectId);
+    const org = auth(organizer._id as Types.ObjectId, true);
     const mem = auth(member._id as Types.ObjectId);
 
     expect((await request(app).get('/api/submissions/admin/stats').set(org)).status).toBe(200);
@@ -249,7 +249,7 @@ describe('SSE event scoping — replay leaks nothing private', () => {
     expect(denied).toBe(403);
     const memberOk = await sseStatus(`/api/events?token=${signAccessToken(member._id as Types.ObjectId)}&teamId=${tid}`);
     expect(memberOk).toBe(200);
-    const orgOk = await sseStatus(`/api/events?token=${signAccessToken(organizer._id as Types.ObjectId)}&teamId=${tid}`);
+    const orgOk = await sseStatus(`/api/events?token=${signAccessToken(organizer._id as Types.ObjectId, true)}&teamId=${tid}`);
     expect(orgOk).toBe(200);
   });
 });

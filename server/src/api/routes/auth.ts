@@ -34,9 +34,9 @@ const loginSchema = z.object({
   password: z.string().min(1).max(128),
 });
 
-function tokensFor(userId: Types.ObjectId) {
+function tokensFor(userId: Types.ObjectId, isOrganizer = false) {
   return {
-    accessToken: signAccessToken(userId),
+    accessToken: signAccessToken(userId, isOrganizer),
     refreshToken: signRefreshToken(userId),
   };
 }
@@ -62,7 +62,7 @@ authRouter.post('/register', credentialsLimiter, validate(registerSchema), async
       verifyTokenExpires: new Date(Date.now() + config.mail.verifyTtlHours * 3600_000),
     });
     sendMailAsync(welcomeEmail({ email: user.email, name: displayName }, displayName, verifyUrl(raw)));
-    res.status(201).json({ user: publicUser(user), ...tokensFor(user._id as Types.ObjectId) });
+    res.status(201).json({ user: publicUser(user), ...tokensFor(user._id as Types.ObjectId, user.isOrganizer) });
   } catch (err) { next(err); }
 });
 
@@ -146,7 +146,7 @@ authRouter.post('/login', credentialsLimiter, validate(loginSchema), async (req,
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw unauthorized('Invalid email or password');
     }
-    res.json({ user: publicUser(user), ...tokensFor(user._id as Types.ObjectId) });
+    res.json({ user: publicUser(user), ...tokensFor(user._id as Types.ObjectId, user.isOrganizer) });
   } catch (err) { next(err); }
 });
 
@@ -156,7 +156,10 @@ authRouter.post('/refresh', credentialsLimiter, async (req, res, next) => {
     if (!refreshToken) throw unauthorized('Missing refresh token');
     const payload = jwt.verify(refreshToken, config.jwtSecret) as { sub: string; type: string };
     if (payload.type !== 'refresh') throw unauthorized('Invalid token type');
-    res.json(tokensFor(new Types.ObjectId(payload.sub)));
+    // Refresh is rare — one lookup is fine, and it keeps deleted accounts out.
+    const user = await User.findById(payload.sub).select('isOrganizer').lean();
+    if (!user) throw unauthorized('Account not found');
+    res.json(tokensFor(new Types.ObjectId(payload.sub), user.isOrganizer));
   } catch (err) { next(err instanceof jwt.JsonWebTokenError ? unauthorized('Invalid refresh token') : err); }
 });
 
