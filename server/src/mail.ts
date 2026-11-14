@@ -1,10 +1,25 @@
+import nodemailer, { type Transporter } from 'nodemailer';
 import { config } from './config.js';
 
 /**
- * Transactional email via Brevo (Sendinblue) REST API.
+ * Transactional email via Brevo SMTP relay (smtp-relay.brevo.com:587).
+ * SMTP is used instead of the REST API because Brevo's API enforces an
+ * IP allowlist that breaks on dynamic cloud egress IPs (e.g. Railway).
  * No-op when BREVO_API_KEY is unset so dev/tests never need it.
  * All sends are fire-and-forget: mail failure must never break a request.
  */
+
+let transporter: Transporter | null = null;
+function getTransporter(): Transporter | null {
+  if (!config.mail.apiKey || !config.mail.smtpUser) return null;
+  transporter ??= nodemailer.createTransport({
+    host: 'smtp-relay.brevo.com',
+    port: 587,
+    secure: false,
+    auth: { user: config.mail.smtpUser, pass: config.mail.apiKey },
+  });
+  return transporter;
+}
 
 interface SendInput {
   to: { email: string; name?: string };
@@ -13,30 +28,19 @@ interface SendInput {
 }
 
 export function mailEnabled(): boolean {
-  return !!config.mail.apiKey;
+  return !!config.mail.apiKey && !!config.mail.smtpUser;
 }
 
 export async function sendMail(input: SendInput): Promise<void> {
-  if (!config.mail.apiKey) return;
+  const t = getTransporter();
+  if (!t) return;
   try {
-    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: {
-        'api-key': config.mail.apiKey,
-        'content-type': 'application/json',
-        accept: 'application/json',
-      },
-      body: JSON.stringify({
-        sender: { email: config.mail.from, name: config.mail.fromName },
-        to: [input.to],
-        subject: input.subject,
-        htmlContent: input.html,
-      }),
+    await t.sendMail({
+      from: `"${config.mail.fromName}" <${config.mail.from}>`,
+      to: input.to.name ? `"${input.to.name}" <${input.to.email}>` : input.to.email,
+      subject: input.subject,
+      html: input.html,
     });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      console.error(`[mail] Brevo ${res.status}: ${body.slice(0, 300)}`);
-    }
   } catch (err) {
     console.error('[mail] send failed:', err);
   }

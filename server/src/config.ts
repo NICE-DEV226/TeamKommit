@@ -16,6 +16,8 @@ export const config = {
   corsOrigin: (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(','),
   mail: {
     apiKey: process.env.BREVO_API_KEY ?? '',
+    // Brevo SMTP login (shown in SMTP & API → SMTP tab), e.g. xxx@smtp-brevo.com
+    smtpUser: process.env.BREVO_SMTP_USER ?? '',
     from: process.env.MAIL_FROM ?? 'noreply@teamkommit.dev',
     fromName: process.env.MAIL_FROM_NAME ?? 'TeamKommit',
     appUrl: process.env.APP_URL ?? 'http://localhost:5173',
