@@ -18,7 +18,25 @@ Optimizations that got us under target: compound index `(hackathonId, lifecycleS
 
 ## PS2 — Submission control plane (`load/submissions.js`)
 
-Simulates 2,000 teams submitting in 10 min (constant-arrival-rate, 200/min, ≤300 VUs). File bytes bypass the API entirely (direct-to-S3 multipart), so API latency measures only the control plane. Target p(95) < 300 ms — run on the deployed environment and attach output here.
+Simulates 2,000 teams submitting in 10 min (constant-arrival-rate, 200/min, ≤300 VUs). File bytes bypass the API entirely (direct-to-S3 multipart), so API latency measures only the control plane. Target p(95) < 300 ms.
+
+Run against production: `BASE_URL=https://app-production-11e1.up.railway.app PAIRS_FILE=pairs.json k6 run load/submissions.js` — 2,000 distinct team/leader token pairs, one `POST /api/submissions` per iteration.
+
+| Metric | Value | Target |
+|---|---|---|
+| http_req_duration p(95) | **283.98 ms** | < 300 ms ✓ |
+| http_req_duration avg | 193.5 ms | — |
+| http_req_duration med | 174.4 ms | — |
+| http_req_failed | **0.00 %** (0 / 2 000) | < 2 % ✓ |
+| Submissions created | **2 000 / 2 000** (100 % checks) | no lost submissions ✓ |
+| http_reqs | 3.33 req/s sustained for 10 min | — |
+
+First production run measured p(95) = 379 ms and drove two optimizations, both verified by this final run:
+
+1. **Parallel reads in `POST /submissions`** — team, hackathon, membership and latest-version lookups are independent; they now run in one `Promise.all` wave instead of four sequential round-trips.
+2. **Stateless `requireAuth`** — the per-request `User.findById` was removed; `isOrganizer` rides in the access token (`org` claim, refreshed on login/refresh). Cuts one more DB round-trip from every authenticated call. Documented trade-off: a deleted account's access token stays valid until expiry (≤ 15 min access TTL).
+
+Infrastructure notes: Railway single container (API + inline worker), MongoDB Atlas, Backblaze B2 for file bytes. The k6 pairs file carries live JWTs and is git-ignored (`load/pairs*.json`).
 
 ## Correctness under load
 
