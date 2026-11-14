@@ -9,3 +9,6 @@ dist/
 .DS_Store
 coverage/
 *.tsbuildinfo
+
+# k6 pair files contain live JWTs — never commit
+load/pairs*.json

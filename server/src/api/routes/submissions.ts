@@ -63,14 +63,21 @@ const createSchema = z.object({
 
 submissionsRouter.post('/', requireAuth, validate(createSchema), asyncH(async (req, res) => {
   const body = req.body as z.infer<typeof createSchema>;
-  const team = await Team.findById(body.teamId).lean();
+  // All reads are independent — run them in one round-trip wave instead of
+  // four sequential ones (matters at Atlas latency under deadline crush).
+  const teamId = new Types.ObjectId(body.teamId);
+  const hackathonId = new Types.ObjectId(body.hackathonId);
+  const [team, hackathon, member, last] = await Promise.all([
+    Team.findById(teamId).lean(),
+    Hackathon.findById(hackathonId).lean(),
+    Membership.findOne({ teamId, participantId: req.userId, status: 'ACTIVE' }).lean(),
+    Submission.findOne({ teamId, hackathonId }).sort({ version: -1 }).select('version').lean(),
+  ]);
   if (!team || team.lifecycleStatus !== 'ACTIVE') throw nf('Team not found');
   // The team must belong to the hackathon being submitted to — otherwise a
   // member could file under another event's deadline/pipeline/stats.
   if (team.hackathonId.toString() !== body.hackathonId) throw nf('Team not found');
-  await requireTeamMember(team._id as Types.ObjectId, req.userId!);
-
-  const hackathon = await Hackathon.findById(body.hackathonId).lean();
+  if (!member) throw forbidden('Only team members can submit');
   if (!hackathon) throw nf('Hackathon not found');
   const dl = deadlineStatus(hackathon);
   if (!dl.open) {
@@ -78,7 +85,6 @@ submissionsRouter.post('/', requireAuth, validate(createSchema), asyncH(async (r
     throw new DomainRejection('DEADLINE_PASSED', 'The submission deadline has passed', 403);
   }
 
-  const last = await Submission.findOne({ teamId: team._id, hackathonId: hackathon._id }).sort({ version: -1 }).select('version').lean();
   const version = (last?.version ?? 0) + 1;
 
   const submission = await Submission.create({
