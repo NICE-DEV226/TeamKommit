@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { post } from '../lib/api';
 import { useProfileCompleteness } from './ProfileNudge';
-import { Gamepad } from './doodles';
 
 export default function EmailVerifyBanner() {
   const { data } = useProfileCompleteness();
@@ -16,31 +15,30 @@ export default function EmailVerifyBanner() {
     try {
       await post('/auth/resend-verification');
       setState('sent');
-      setTimeout(() => qc.invalidateQueries({ queryKey: ['me'] }), 1000);
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['me'] }), 1500);
     } catch {
       setState('error');
     }
   }
 
   return (
-    <div className="sticky top-20 z-30 mb-6 flex flex-wrap items-center gap-4 rounded-2xl border-2 border-sky-500/40 bg-sky-400/15 px-5 py-4 shadow-[3px_3px_0_rgba(28,25,23,0.15)] backdrop-blur-sm">
-      <Gamepad className="h-10 w-10 shrink-0 -rotate-6 text-sky-500" />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-extrabold text-ink">Confirm your email address</p>
-        <p className="mt-0.5 text-xs font-semibold text-ink/60">
+    <div className="sticky top-[68px] z-30 mb-5">
+      <div className="nav-pill mx-auto flex max-w-4xl items-center gap-3 px-4 py-2.5">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-ink bg-sky-400 text-[11px] font-black text-white" aria-hidden="true">@</span>
+        <p className="min-w-0 flex-1 truncate text-[13px] font-bold text-ink">
           {state === 'sent'
-            ? 'Verification email sent — check your inbox (and spam).'
+            ? 'Verification email sent — check your inbox.'
             : state === 'error'
-              ? 'Could not send — try again in a moment.'
-              : 'We sent you a confirmation link — verify to secure your account.'}
+              ? 'Could not send — try again.'
+              : 'Confirm your email to secure your account.'}
         </p>
+        {state !== 'sent' && (
+          <button onClick={resend} disabled={state === 'sending'}
+            className="shrink-0 rounded-full border-2 border-ink bg-sky-400 px-3.5 py-1 text-[11px] font-extrabold text-white transition-transform hover:-translate-y-0.5 disabled:opacity-50">
+            {state === 'sending' ? 'Sending…' : 'Resend'}
+          </button>
+        )}
       </div>
-      {state !== 'sent' && (
-        <button onClick={resend} disabled={state === 'sending'}
-          className="btn-sm shrink-0 rounded-xl border-2 border-ink bg-sky-400 px-4 py-2 text-xs font-extrabold text-white hover:bg-sky-500 disabled:opacity-50">
-          {state === 'sending' ? 'Sending…' : 'Resend email'}
-        </button>
-      )}
     </div>
   );
 }
